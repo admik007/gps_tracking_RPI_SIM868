@@ -1,0 +1,13 @@
+[Unit]
+Description=MQTT to GPS Logger
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/gps/mqtt_gps_tracking.py
+WorkingDirectory=/opt/gps/
+Restart=always
+User=root
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
