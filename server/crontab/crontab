@@ -1,0 +1,4 @@
+0 */1   * * *   root    systemctl restart mqtt_gps_mysql.service
+*  *   * * *   root   /opt/gps/mysql_tracking_time_replace.sh
+*/14  *   * * *   root   /opt/gps/mysql_tracking_get_address.sh
+05  0   1 * *   root    /opt/gps/mysql_tracking_move_old_month.sh

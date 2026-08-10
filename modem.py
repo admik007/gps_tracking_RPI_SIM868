@@ -474,7 +474,7 @@ def modem_init():
  # -------------------------
 
  if not send_at(
-  'AT+CIPSTART="TCP","mqtt.ztk-comp.sk","1883"',
+  'AT+CIPSTART="TCP","'+MQTT_HOST+'","'+MQTT_PORT+'"',
   "CONNECT OK",
   20000
  ):
@@ -675,7 +675,7 @@ def modem_init2():
  t = ms()
 
  if not send_at(
-  'AT+CIPSTART="TCP","mqtt.ztk-comp.sk","1883"',
+  'AT+CIPSTART="TCP","'+MQTT_HOST+'","'+MQTT_PORT+'"',
   "CONNECT OK",
   20000
  ):
