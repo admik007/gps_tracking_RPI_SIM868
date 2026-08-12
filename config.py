@@ -1,8 +1,8 @@
 MQTT_USER = "gps_user"
 MQTT_PASS = "gps_host"
-MQTT_HOST = "mqtt.domain.xx"
+MQTT_HOST = "mqtt.ztk-comp.sk"
 MQTT_PORT = 1883
 
-SSID = "NETWORK"
-PASS = "PASSWORD"
-HOST = "fiwmware.domain.xx"
+SSID = "iPhone14"
+PASS = "12345678901234567890123456"
+HOST = "gps.ztk-comp.sk"
