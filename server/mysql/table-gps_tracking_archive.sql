@@ -26,3 +26,9 @@ CREATE TABLE `gps_tracking_archive` (
   `temprpi` char(10) CHARACTER SET latin1 COLLATE latin1_swedish_ci NOT NULL,
   `loadrpi` char(11) CHARACTER SET latin1 COLLATE latin1_swedish_ci NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+
+--
+-- Indexes for table `gps_tracking_archive`
+--
+ALTER TABLE `gps_tracking_archive`
+  ADD KEY `idx_devicerpi_time` (`devicerpi`,`time`);
