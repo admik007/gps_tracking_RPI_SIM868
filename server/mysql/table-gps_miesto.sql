@@ -9,3 +9,15 @@ CREATE TABLE `gps_miesto` (
   `miesto` text DEFAULT NULL,
   `status` varchar(2) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
+
+--
+-- Indexes for table `gps_miesto`
+--
+ALTER TABLE `gps_miesto`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- AUTO_INCREMENT for table `gps_miesto`
+--
+ALTER TABLE `gps_miesto`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
