@@ -3,6 +3,6 @@ MQTT_PASS = "gps_host"
 MQTT_HOST = "mqtt.server.xx"
 MQTT_PORT = 1883
 
-SSID = "SSID"
-PASS = "SSID"
+SSID = "SSID2"
+PASS = "SSID2"
 HOST = "firmware.server.xx"
