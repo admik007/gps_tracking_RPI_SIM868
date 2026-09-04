@@ -26,96 +26,70 @@ PENDING_BATCH_SIZE = 8
 # =========================
 
 mqtt_ok = False
+storage_status = "unknown"
 
 print("System start")
-
 
 # =========================
 # SD LOGGER
 # =========================
-
 try:
-
     logger = Logger()
-
-    print("SD logger ready")
-
+    if logger.sd_ok:
+        storage_status = "ok"
+    else:
+        storage_status = "failed"
 except Exception as e:
-
     print("SD logger failed:", e)
-
     logger = None
-
+    storage_status = "failed"  
 
 # =========================
 # MODEM
 # =========================
-
 print("Modem power on")
 modem.power_on_off()
 time.sleep(5)
 
-
 # =========================
 # GPS
 # =========================
-
 gps = GPS()
-
 
 # =========================
 # MODEM INIT
 # =========================
-
 print("Modem init")
-
 if modem.modem_init():
-
     print("Modem OK")
-
-
     # =========================
     # INITIAL NETWORK INFO
     # =========================
-
     try:
-
         network_info = modem.get_network_info()
-
         print(
             "Initial network info:",
             network_info
         )
-
     except Exception as e:
-
         print(
             "Network info error:",
             e
         )
-
         network_info = {
             "csq": 0,
             "creg": 0,
             "cgatt": 0
         }
-
-
     # =========================
     # MQTT CONNECT
     # =========================
-
     if mqtt.mqtt_connect():
-
         mqtt_ok = True
-
         print("MQTT connected")
-
-
         # =========================
         # ONLINE STATUS
         # =========================
-
         mqtt.mqtt_publish(
             "gps/" + mqtt.CLIENT_ID + "/status",
             json.dumps({
@@ -123,24 +97,15 @@ if modem.modem_init():
                 "msg": "online"
             })
         )
-
-
     else:
-
         print("MQTT failed")
-
-
 else:
-
     print("Modem failed")
-
     network_info = {
         "csq": 0,
         "creg": 0,
         "cgatt": 0
     }
-
-
 # =========================
 # TIMERS
 # =========================
@@ -149,22 +114,24 @@ last_network_check = time.time()
 last_network_info = time.time()
 last_publish = 0
 gsm_failed_since = None
-
 # =========================
 # PENDING STATE
 # =========================
-
 # Po uspesnom batchi posleme aktualny bod.
 send_current_after_batch = False
-
-
 # =========================
 # LED BLINK
 # =========================
 led = machine.Pin("LED", machine.Pin.OUT)
-
 led.toggle()
+# =========================
+# FUNKCIA NA ZISTENIE STAVU SD
+# =========================
+def get_storage_status():
+    if logger is not None and logger.sd_ok:
+        return "ok"
 
+    return "failed"
 # =========================
 # MAIN LOOP
 # =========================
@@ -199,7 +166,7 @@ while True:
             # =================================================
             # PERMANENT SD LOG
             # =================================================
-            if logger:
+            if logger is not None and logger.sd_ok:
                 try:
                     logger.write(
                         record,
@@ -232,7 +199,8 @@ while True:
                         "csq": network_info["csq"],
                         "creg": network_info["creg"],
                         "cgatt": network_info["cgatt"],
-                        "time": gps.gps_datetime()
+                        "time": gps.gps_datetime(),
+                        "storage": get_storage_status()
                     }
                     message = json.dumps(payload)
                     # -----------------------------------------
@@ -254,7 +222,7 @@ while True:
                             # AFTER CURRENT POINT:
                             # TRY ONE CACHE BATCH
                             # ---------------------------------
-                            if logger:
+                            if logger is not None and logger.sd_ok:
                                 try:
                                     sent = logger.flush_pending(
                                         mqtt_publish=mqtt.mqtt_publish,
@@ -285,7 +253,7 @@ while True:
                             # -----------------------------
                             # CACHE CURRENT POINT
                             # -----------------------------
-                            if logger:
+                            if logger is not None and logger.sd_ok:
                                 try:
                                     logger.cache(
                                         record,
@@ -302,7 +270,7 @@ while True:
                             e
                         )
                         mqtt_ok = False
-                        if logger:
+                        if logger is not None and logger.sd_ok:
                             try:
                                 logger.cache(
                                     record,
@@ -317,17 +285,16 @@ while True:
                 # =================================================
                 # MQTT OFFLINE
                 # =================================================
-                if logger:
+                if logger is not None and logger.sd_ok:
                     try:
-                        logger.cache(
+                        logger.write(
                             record,
                             network_info
                         )
                     except Exception as e:
-                        print(
-                            "Pending write error:",
-                            e
-                        )
+                        print("SD write error:", e)
+                        logger.sd_ok = False
+                        storage_status = "failed"
     # =====================================================
     # NETWORK INFO
     # =====================================================
@@ -399,7 +366,7 @@ while True:
                         # =================================================
                         # SEND ONE PENDING BATCH
                         # =================================================
-                        if logger:
+                        if logger is not None and logger.sd_ok:
                             try:
                                 sent = logger.flush_pending(
                                     mqtt_publish=
@@ -502,7 +469,7 @@ while True:
                                 # =================================================
                                 # SEND ONE PENDING BATCH
                                 # =================================================
-                                if logger:
+                                if logger is not None and logger.sd_ok:
                                     try:
                                         sent = (
                                             logger.flush_pending(
