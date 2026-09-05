@@ -100,22 +100,17 @@ def mqtt_connect():
 # =========================
 # MQTT PUBLISH
 # =========================
-
 def mqtt_publish(topic, message):
-
     topic_data = mqtt_string(topic)
     payload = message.encode()
-
     packet = (
         b'\x30' +
         mqtt_length(
-            len(topic_data) +
-            len(payload)
+            len(topic_data) + len(payload)
         ) +
         topic_data +
         payload
     )
-
     print("MQTT PUBLISH")
     print("topic len:", len(topic_data))
     print("payload len:", len(payload))
@@ -123,11 +118,21 @@ def mqtt_publish(topic, message):
         "remaining:",
         len(topic_data) + len(payload)
     )
-    print(packet)
-
-    return modem.tcp_send(packet)
-
-
+    try:
+        result = modem.tcp_send(packet)
+        print(
+            "MQTT tcp_send result:",
+            repr(result)
+        )
+        if result:
+            return True
+        return False
+    except Exception as e:
+        print(
+            "MQTT publish failed:",
+            e
+        )
+        return False
 # =========================
 # CACHE LINE -> JSON
 # =========================
