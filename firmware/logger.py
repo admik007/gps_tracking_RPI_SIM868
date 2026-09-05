@@ -372,6 +372,7 @@ class Logger:
                 topic,
                 message
             )
+           print("Pending MQTT result:",repr(result))
         except Exception as e:
             print(
                 "Pending MQTT error:",
@@ -382,7 +383,7 @@ class Logger:
         # =========================
         # SEND FAILED
         # =========================
-        if result is not True:
+        if not result:
             print(
                 "Pending batch MQTT send failed"
             )
