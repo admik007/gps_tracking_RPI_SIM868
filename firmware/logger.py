@@ -2,11 +2,11 @@ from machine import SPI, Pin
 import os
 import sdcard
 import time
-import machine
 
 
 PENDING_FILE = "/sd/pending.txt"
-PENDING_TMP = "/sd/pending.tmp"
+PENDING_POS_FILE = "/sd/pending.pos"
+PENDING_POS_TMP = "/sd/pending.pos.tmp"
 
 BATCH_SIZE = 20
 
@@ -33,16 +33,22 @@ class Logger:
     # =========================
     def init_sd(self):
         for attempt in range(1, 4):
-            print("SD init attempt {}/3".format(attempt))
+            print(
+                "SD init attempt {}/3".format(attempt)
+            )
 
             try:
+                # -------------------------
                 # UNMOUNT
+                # -------------------------
                 try:
                     os.umount("/sd")
                 except:
                     pass
 
+                # -------------------------
                 # SPI
+                # -------------------------
                 self.spi = SPI(
                     0,
                     baudrate=10000000,
@@ -51,24 +57,35 @@ class Logger:
                     miso=Pin(16)
                 )
 
-                # CHIP SELECT
+                # -------------------------
+                # CS
+                # -------------------------
                 self.cs = Pin(
                     17,
                     Pin.OUT,
                     value=1
                 )
 
-                # SPI IDLE CLOCKS
-                self.spi.write(b"\xff" * 10)
+                # -------------------------
+                # SPI IDLE
+                # -------------------------
+                self.spi.write(
+                    b"\xff" * 10
+                )
+
                 time.sleep_ms(100)
 
+                # -------------------------
                 # SD CARD
+                # -------------------------
                 self.sd = sdcard.SDCard(
                     self.spi,
                     self.cs
                 )
 
+                # -------------------------
                 # MOUNT
+                # -------------------------
                 os.mount(
                     self.sd,
                     "/sd"
@@ -78,15 +95,24 @@ class Logger:
                 return True
 
             except Exception as e:
-                print("SD init failed:", e)
+                print(
+                    "SD init failed:",
+                    e
+                )
 
+                # -------------------------
+                # CLEANUP
+                # -------------------------
                 try:
                     os.umount("/sd")
                 except:
                     pass
 
                 if self.cs is not None:
-                    self.cs.value(1)
+                    try:
+                        self.cs.value(1)
+                    except:
+                        pass
 
                 time.sleep_ms(500)
 
@@ -104,11 +130,12 @@ class Logger:
         day = d[0:2]
         hour = t[0:2]
 
-        return "/sd/{year}.{month}.{day}-{hour}.txt".format(
-            year=year,
-            month=month,
-            day=day,
-            hour=hour
+        return (
+            "/sd/" +
+            year + "." +
+            month + "." +
+            day + "-" +
+            hour + ".txt"
         )
 
     # =========================
@@ -123,29 +150,17 @@ class Logger:
             }
 
         return (
-            "{date},"
-            "{ts},"
-            "{lat},"
-            "{lon},"
-            "{spd},"
-            "{dir},"
-            "{alt},"
-            "{sat},"
-            "{csq},"
-            "{creg},"
-            "{cgatt}\n"
-        ).format(
-            date=point["date"],
-            ts=point["ts"],
-            lat=point["lat"],
-            lon=point["lon"],
-            spd=point["spd"],
-            dir=point["dir"],
-            alt=point["alt"],
-            sat=point["sat"],
-            csq=network_info["csq"],
-            creg=network_info["creg"],
-            cgatt=network_info["cgatt"]
+            str(point["date"]) + "," +
+            str(point["ts"]) + "," +
+            str(point["lat"]) + "," +
+            str(point["lon"]) + "," +
+            str(point["spd"]) + "," +
+            str(point["dir"]) + "," +
+            str(point["alt"]) + "," +
+            str(point["sat"]) + "," +
+            str(network_info["csq"]) + "," +
+            str(network_info["creg"]) + "," +
+            str(network_info["cgatt"]) + "\n"
         )
 
     # =========================
@@ -157,7 +172,11 @@ class Logger:
 
         try:
             filename = self.filename(point)
-            line = self.point_line(point, network_info)
+
+            line = self.point_line(
+                point,
+                network_info
+            )
 
             with open(filename, "a") as f:
                 f.write(line)
@@ -165,14 +184,12 @@ class Logger:
             return True
 
         except Exception as e:
-            print("SD permanent write failed:", e)
-            self.sd_ok = False
+            print(
+                "SD permanent write failed:",
+                e
+            )
 
-            try:
-                os.umount("/sd")
-            except:
-                pass
-
+            self._disable_sd()
             return False
 
     # =========================
@@ -183,7 +200,15 @@ class Logger:
             return False
 
         try:
-            line = self.point_line(point, network_info)
+            # Ak zostal kompletne spracovany
+            # pending subor po predoslom restarte,
+            # vycistime ho pred pridanim noveho bodu.
+            self._cleanup_consumed_pending()
+
+            line = self.point_line(
+                point,
+                network_info
+            )
 
             with open(PENDING_FILE, "a") as f:
                 f.write(line)
@@ -191,14 +216,12 @@ class Logger:
             return True
 
         except Exception as e:
-            print("SD cache write failed:", e)
-            self.sd_ok = False
+            print(
+                "SD cache write failed:",
+                e
+            )
 
-            try:
-                os.umount("/sd")
-            except:
-                pass
-
+            self._disable_sd()
             return False
 
     # =========================
@@ -209,11 +232,17 @@ class Logger:
             return False
 
         try:
-            line = self.point_line(point, network_info)
+            line = self.point_line(
+                point,
+                network_info
+            )
+
             filename = self.filename(point)
 
             with open(filename, "a") as f:
                 f.write(line)
+
+            self._cleanup_consumed_pending()
 
             with open(PENDING_FILE, "a") as f:
                 f.write(line)
@@ -221,20 +250,143 @@ class Logger:
             return True
 
         except Exception as e:
-            print("SD write and cache failed:", e)
-            self.sd_ok = False
+            print(
+                "SD write and cache failed:",
+                e
+            )
 
+            self._disable_sd()
+            return False
+
+    # =========================
+    # DISABLE SD
+    # =========================
+    def _disable_sd(self):
+        self.sd_ok = False
+
+        try:
+            os.umount("/sd")
+        except:
+            pass
+
+    # =========================
+    # FILE SIZE
+    # =========================
+    def _pending_file_size(self):
+        try:
+            stat = os.stat(PENDING_FILE)
+            return stat[6]
+        except:
+            return 0
+
+    # =========================
+    # READ OFFSET FILE
+    # =========================
+    def _read_offset_file(self, filename):
+        try:
+            with open(filename, "r") as f:
+                value = f.read().strip()
+
+            if not value:
+                return None
+
+            offset = int(value)
+
+            if offset < 0:
+                return None
+
+            return offset
+
+        except:
+            return None
+
+    # =========================
+    # LOAD PENDING OFFSET
+    # =========================
+    def _load_pending_offset(self):
+        if not self.pending_file_exists():
+            return 0
+
+        size = self._pending_file_size()
+
+        # TMP kontrolujeme ako prve.
+        # Ak zariadenie spadlo pocas aktualizacie
+        # pending.pos, TMP moze obsahovat novsi offset.
+        offset = self._read_offset_file(
+            PENDING_POS_TMP
+        )
+
+        if offset is None:
+            offset = self._read_offset_file(
+                PENDING_POS_FILE
+            )
+
+        if offset is None:
+            return 0
+
+        # Offset mimo suboru nie je platny.
+        if offset > size:
+            print(
+                "Invalid pending offset:",
+                offset,
+                "file size:",
+                size
+            )
+
+            return 0
+
+        return offset
+
+    # =========================
+    # SAVE PENDING OFFSET
+    # =========================
+    def _save_pending_offset(self, offset):
+        try:
+            # Najprv zapiseme novy offset
+            # do docasneho suboru.
+            with open(PENDING_POS_TMP, "w") as f:
+                f.write(str(offset))
+
+            # Potom odstranime stary offset.
             try:
-                os.umount("/sd")
-            except:
+                os.remove(PENDING_POS_FILE)
+            except OSError:
                 pass
+
+            # TMP sa stane aktualnym offsetom.
+            os.rename(
+                PENDING_POS_TMP,
+                PENDING_POS_FILE
+            )
+
+            return True
+
+        except Exception as e:
+            print(
+                "Pending offset write error:",
+                e
+            )
 
             return False
 
     # =========================
-    # PENDING EXISTS
+    # REMOVE OFFSET FILES
     # =========================
-    def pending_exists(self):
+    def _clear_pending_offset(self):
+        try:
+            os.remove(PENDING_POS_FILE)
+        except OSError:
+            pass
+
+        try:
+            os.remove(PENDING_POS_TMP)
+        except OSError:
+            pass
+
+    # =========================
+    # PENDING FILE EXISTS
+    # =========================
+    def pending_file_exists(self):
         try:
             os.stat(PENDING_FILE)
             return True
@@ -242,34 +394,114 @@ class Logger:
             return False
 
     # =========================
-    # READ BATCH
+    # PENDING EXISTS
     # =========================
-    def read_pending_batch(self, count=BATCH_SIZE):
-        if not self.pending_exists():
-            return []
+    def pending_exists(self):
+        if not self.pending_file_exists():
+            return False
 
+        size = self._pending_file_size()
+
+        if size <= 0:
+            return False
+
+        offset = self._load_pending_offset()
+
+        return offset < size
+
+    # =========================
+    # CLEANUP CONSUMED FILE
+    # =========================
+    def _cleanup_consumed_pending(self):
+        if not self.pending_file_exists():
+            self._clear_pending_offset()
+            return
+
+        size = self._pending_file_size()
+
+        if size <= 0:
+            self.clear_pending()
+            return
+
+        offset = self._load_pending_offset()
+
+        if offset >= size:
+            print(
+                "Pending file fully processed, clearing"
+            )
+
+            self.clear_pending()
+
+    # =========================
+    # READ BATCH + END OFFSET
+    # =========================
+    def _read_pending_batch_with_offset(
+        self,
+        count=BATCH_SIZE
+    ):
+        if count <= 0:
+            return [], 0
+
+        if not self.pending_file_exists():
+            return [], 0
+
+        start_offset = self._load_pending_offset()
         lines = []
+        end_offset = start_offset
 
         try:
-            with open(PENDING_FILE, "r") as f:
-                for _ in range(count):
-                    line = f.readline()
+            with open(PENDING_FILE, "rb") as f:
+                f.seek(start_offset)
 
-                    if not line:
+                read_count = 0
+
+                while read_count < count:
+                    raw_line = f.readline()
+
+                    if not raw_line:
                         break
 
-                    line = line.strip()
+                    # Riadok bol precitany.
+                    # Offset sa musi posunut aj ked
+                    # je riadok prazdny alebo chybny.
+                    end_offset = f.tell()
+
+                    try:
+                        line = raw_line.decode().strip()
+                    except:
+                        line = ""
 
                     if line:
                         lines.append(line)
+                        read_count += 1
+
+            return lines, end_offset
 
         except Exception as e:
-            print("Pending batch read error:", e)
+            print(
+                "Pending batch read error:",
+                e
+            )
+
+            return [], start_offset
+
+    # =========================
+    # READ BATCH
+    # =========================
+    def read_pending_batch(
+        self,
+        count=BATCH_SIZE
+    ):
+        lines, end_offset = (
+            self._read_pending_batch_with_offset(
+                count
+            )
+        )
 
         return lines
 
     # =========================
-    # REMOVE BATCH
+    # ADVANCE PENDING
     # =========================
     def pending_pop_batch(self, count):
         if count <= 0:
@@ -278,46 +510,23 @@ class Logger:
         if not self.pending_exists():
             return False
 
-        try:
-            with open(PENDING_FILE, "r") as src:
-                skipped = 0
-
-                # Preskočí odoslané riadky
-                while skipped < count:
-                    line = src.readline()
-
-                    if not line:
-                        break
-
-                    skipped += 1
-
-                # Zapíše zvyšok do dočasného súboru
-                with open(PENDING_TMP, "w") as dst:
-                    while True:
-                        line = src.readline()
-
-                        if not line:
-                            break
-
-                        dst.write(line)
-
-            # Odstránenie pôvodného súboru
-            try:
-                os.remove(PENDING_FILE)
-            except OSError:
-                pass
-
-            # Premenovanie dočasného súboru
-            os.rename(
-                PENDING_TMP,
-                PENDING_FILE
+        lines, end_offset = (
+            self._read_pending_batch_with_offset(
+                count
             )
+        )
 
-            return True
-
-        except Exception as e:
-            print("Pending batch remove error:", e)
+        if not lines:
             return False
+
+        if not self._save_pending_offset(
+            end_offset
+        ):
+            return False
+
+        self._cleanup_consumed_pending()
+
+        return True
 
     # =========================
     # FLUSH ONE BATCH
@@ -334,25 +543,38 @@ class Logger:
 
         import json
 
-        lines = self.read_pending_batch(batch_size)
+        # ---------------------------------
+        # READ NEXT BATCH FROM OFFSET
+        # ---------------------------------
+        lines, end_offset = (
+            self._read_pending_batch_with_offset(
+                batch_size
+            )
+        )
 
         if not lines:
+            self._cleanup_consumed_pending()
             return 0
 
         points = []
 
+        # ---------------------------------
+        # PARSE BATCH
+        # ---------------------------------
         for line in lines:
             fields = line.split(",")
 
-            # Poškodený riadok preskočíme.
-            # Po úspešnom odoslaní sa však odstráni
-            # celý načítaný batch, aby nezablokoval frontu.
             if len(fields) < 11:
-                print("Invalid pending line, removing:", line)
+                print(
+                    "Invalid pending line, skipping:",
+                    line
+                )
                 continue
 
             try:
+                # -------------------------
                 # GPS TIME UTC
+                # -------------------------
                 gps_time = (
                     "20" +
                     fields[0][4:6] + "-" +
@@ -363,7 +585,9 @@ class Logger:
                     "Z"
                 )
 
+                # -------------------------
                 # POINT
+                # -------------------------
                 point = {
                     "lat": float(fields[2]),
                     "lon": float(fields[3]),
@@ -380,19 +604,37 @@ class Logger:
                 points.append(point)
 
             except Exception as e:
-                print("Pending parse error, removing line:", e)
+                print(
+                    "Pending parse error, skipping:",
+                    e
+                )
 
-        # Batch obsahoval iba neplatné riadky.
-        # Odstránime ich, aby nezablokovali frontu.
+        # ---------------------------------
+        # ONLY INVALID LINES
+        # ---------------------------------
         if not points:
-            if self.pending_pop_batch(len(lines)):
-                print("Removed invalid pending batch:", len(lines))
-                return len(lines)
+            print(
+                "Pending batch contains no valid points"
+            )
 
-            print("Could not remove invalid pending batch")
+            # Posunieme offset, aby poskodene
+            # riadky nezablokovali frontu.
+            if not self._save_pending_offset(
+                end_offset
+            ):
+                print(
+                    "Could not advance pending offset"
+                )
+
+                return 0
+
+            self._cleanup_consumed_pending()
+
             return 0
 
+        # =========================
         # BATCH PAYLOAD
+        # =========================
         payload = {
             "id": device_id,
             "points": points
@@ -411,7 +653,9 @@ class Logger:
             len(message)
         )
 
+        # =========================
         # MQTT SEND
+        # =========================
         try:
             result = mqtt_publish(
                 topic,
@@ -424,28 +668,58 @@ class Logger:
             )
 
         except Exception as e:
-            print("Pending MQTT error:", e)
-            return 0
-
-        # SEND FAILED
-        if not result:
-            print("Pending batch MQTT send failed")
-            return 0
-
-        # SEND OK
-        # Odstránime celý načítaný batch, vrátane
-        # prípadných poškodených riadkov.
-        if not self.pending_pop_batch(len(lines)):
             print(
-                "WARNING: batch sent but cache "
-                "could not be updated"
+                "Pending MQTT error:",
+                e
             )
+
+            return 0
+
+        # =========================
+        # SEND FAILED
+        # =========================
+        if not result:
+            print(
+                "Pending batch MQTT send failed"
+            )
+
+            # Offset sa neposunie.
+            # Batch zostane na dalsi pokus.
+            return 0
+
+        # =========================
+        # SEND OK
+        # =========================
+
+        # MQTT odoslanie bolo uspesne.
+        # Neprepisujeme pending.txt.
+        # Ulozime iba novy byte offset.
+        if not self._save_pending_offset(
+            end_offset
+        ):
+            print(
+                "WARNING: batch sent but "
+                "pending offset could not be updated"
+            )
+
+            # Pri dalsom pokuse sa moze batch
+            # odoslat znova, pretoze offset
+            # nebol bezpecne ulozeny.
             return 0
 
         print(
-            "Pending batch sent and removed:",
-            len(lines)
+            "Pending batch sent:",
+            len(points)
         )
+
+        print(
+            "Pending offset:",
+            end_offset
+        )
+
+        # Ak sme dosli na koniec suboru,
+        # odstranime pending.txt aj pending.pos.
+        self._cleanup_consumed_pending()
 
         return len(points)
 
@@ -457,9 +731,12 @@ class Logger:
             return 0
 
         count = 0
+        offset = self._load_pending_offset()
 
         try:
-            with open(PENDING_FILE, "r") as f:
+            with open(PENDING_FILE, "rb") as f:
+                f.seek(offset)
+
                 while True:
                     line = f.readline()
 
@@ -470,9 +747,18 @@ class Logger:
                         count += 1
 
         except Exception as e:
-            print("Pending count error:", e)
+            print(
+                "Pending count error:",
+                e
+            )
 
         return count
+
+    # =========================
+    # PENDING OFFSET
+    # =========================
+    def pending_offset(self):
+        return self._load_pending_offset()
 
     # =========================
     # CLEAR PENDING
@@ -483,6 +769,8 @@ class Logger:
         except OSError:
             pass
 
+        self._clear_pending_offset()
+
     # =========================
     # LIST FILES
     # =========================
@@ -492,6 +780,11 @@ class Logger:
 
         try:
             return os.listdir("/sd")
+
         except Exception as e:
-            print("SD list files failed:", e)
+            print(
+                "SD list files failed:",
+                e
+            )
+
             return []
