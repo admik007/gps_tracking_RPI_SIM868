@@ -280,13 +280,13 @@ class Logger:
     # =========================
     # FLUSH ONE BATCH
     # =========================
-   def flush_pending(
+    def flush_pending(
        self,
        mqtt_publish,
        topic,
        device_id,
        batch_size=BATCH_SIZE
-   ):
+    ):
        if not self.sd_ok:
            return 0
        import json
