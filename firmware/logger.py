@@ -323,83 +323,6 @@ class Logger:
     # FLUSH ONE BATCH
     # =========================
     def flush_pending(
-<<<<<<< HEAD
-       self,
-       mqtt_publish,
-       topic,
-       device_id,
-       batch_size=BATCH_SIZE
-    ):
-       if not self.sd_ok:
-           return 0
-       import json
-       lines = self.read_pending_batch(batch_size)
-       if not lines:
-           return 0
-       points = []
-       for line in lines:
-           fields = line.split(",")
-           if len(fields) < 11:
-               print("Invalid pending line, removing:", line)
-               continue
-           try:
-               gps_time = (
-                   "20" +
-                   fields[0][4:6] + "-" +
-                   fields[0][2:4] + "-" +
-                   fields[0][0:2] +
-                   "T" +
-                   fields[1] +
-                   "Z"
-               )
-               point = {
-                   "lat": float(fields[2]),
-                   "lon": float(fields[3]),
-                   "spd": float(fields[4]),
-                   "dir": float(fields[5]),
-                   "alt": float(fields[6]),
-                   "sat": int(fields[7]),
-                   "csq": int(fields[8]),
-                   "creg": int(fields[9]),
-                   "cgatt": int(fields[10]),
-                   "time": gps_time
-               }
-               points.append(point)
-           except Exception as e:
-               print("Pending parse error, removing line:", e)
-       # Ak batch obsahuje iba poškodené riadky,
-       # odstránime ich, aby nezablokovali frontu.
-       if not points:
-           if self.pending_pop_batch(len(lines)):
-               print("Removed invalid pending batch:", len(lines))
-               return len(lines)
-           print("Could not remove invalid pending batch")
-           return 0
-       payload = {
-           "id": device_id,
-           "points": points
-       }
-       message = json.dumps(payload)
-       print("Sending pending batch:", len(points), "points")
-       print("MQTT payload length:", len(message))
-       try:
-           result = mqtt_publish(topic, message)
-           print("Pending MQTT result:", repr(result))
-       except Exception as e:
-           print("Pending MQTT error:", e)
-           return 0
-       if not result:
-           print("Pending batch MQTT send failed")
-           return 0
-       # MQTT odoslanie bolo úspešné.
-       # Odstránime celý načítaný batch, vrátane poškodených riadkov.
-       if not self.pending_pop_batch(len(lines)):
-           print("WARNING: batch sent but cache could not be updated")
-           return 0
-       print("Pending batch sent and removed:", len(lines))
-       return len(points)
-        # =========================
-=======
         self,
         mqtt_publish,
         topic,
@@ -469,7 +392,6 @@ class Logger:
             print("Could not remove invalid pending batch")
             return 0
 
->>>>>>> e9b057d (fixing typo)
         # BATCH PAYLOAD
         payload = {
             "id": device_id,
