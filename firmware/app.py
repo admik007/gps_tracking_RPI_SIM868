@@ -213,7 +213,7 @@ while True:
                             "/location",
                             message
                         )
-                        if result is True:
+                        if result:
                             last_publish = time.time()
                             print(
                                 "Current GPS sent"
