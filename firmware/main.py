@@ -6,7 +6,7 @@ PASS = config.PASS
 HOST = config.HOST
 
 DEVICE_ID = "".join("{:02x}".format(b) for b in machine.unique_id())
-BASE_URL = f"http://"+HOST+"/firmware/{DEVICE_ID}/"
+BASE_URL = f"http://"+HOST+"/firmware/"+DEVICE_ID+"/"
 VERSION_URL = BASE_URL + "version.txt"
 MANIFEST_URL = BASE_URL + "manifest.txt"
 LOCAL_VERSION_FILE = "version.txt"
@@ -23,7 +23,8 @@ wlan.active(True)
 def connect_wifi():
     wlan.disconnect()
     time.sleep(0.3)
-    wlan.connect(SSID, security=0)
+#    wlan.connect(SSID, security=0)
+    wlan.connect(SSID, PASS)
     timeout = 15000  # 15 seconds
     start = time.ticks_ms()
     while not wlan.isconnected():
