@@ -806,6 +806,163 @@ def get_network_info():
   "cgatt": cgatt
  }
 
+# ============================================================
+# TCP CONNECTION CHECK
+# ============================================================
+
+def tcp_check():
+
+    print("Checking TCP connection")
+
+    response = send_at_get_response(
+        "AT+CIPSTATUS",
+        "STATE:",
+        3000
+    )
+
+    try:
+        text = response.decode()
+    except Exception:
+        print("TCP status decode failed")
+        return False
+
+    if "STATE: CONNECT OK" in text:
+        print("TCP connection OK")
+        return True
+
+    print("TCP connection NOT active")
+    print(text)
+
+    return False
+
+
+# ============================================================
+# TCP RECONNECT
+# ============================================================
+
+def tcp_reconnect():
+
+    print("")
+    print("========================================")
+    print("TCP RECONNECT")
+    print("========================================")
+
+    # --------------------------------------------------------
+    # CHECK IF TCP IS STILL ALIVE
+    # --------------------------------------------------------
+
+    if tcp_check():
+        print("TCP already connected")
+        return True
+
+    # --------------------------------------------------------
+    # CHECK GSM NETWORK
+    # --------------------------------------------------------
+
+    if not check_network():
+        print("TCP reconnect failed: no GSM network")
+        return False
+
+    # --------------------------------------------------------
+    # RESET IP SESSION
+    # --------------------------------------------------------
+
+    print("Resetting IP session")
+
+    if not send_at(
+        "AT+CIPSHUT",
+        "SHUT OK",
+        10000
+    ):
+        print("TCP reconnect: CIPSHUT failed")
+        return False
+
+    time.sleep_ms(200)
+
+    # --------------------------------------------------------
+    # APN
+    # --------------------------------------------------------
+
+    if not send_at(
+        'AT+CSTT="internet"',
+        "OK"
+    ):
+        print("TCP reconnect: CSTT failed")
+        return False
+
+    time.sleep_ms(200)
+
+    # --------------------------------------------------------
+    # START GPRS DATA SESSION
+    # --------------------------------------------------------
+
+    if not send_at(
+        "AT+CIICR",
+        "OK",
+        10000
+    ):
+        print("TCP reconnect: CIICR failed")
+        return False
+
+    time.sleep_ms(500)
+
+    # --------------------------------------------------------
+    # GET IP ADDRESS
+    # --------------------------------------------------------
+
+    if not send_at(
+        "AT+CIFSR",
+        ".",
+        5000
+    ):
+        print("TCP reconnect: CIFSR failed")
+        return False
+
+    time.sleep_ms(200)
+
+    # --------------------------------------------------------
+    # OPEN TCP SOCKET
+    # --------------------------------------------------------
+
+    command = (
+        'AT+CIPSTART="TCP","' +
+        str(MQTT_HOST) +
+        '","' +
+        str(MQTT_PORT) +
+        '"'
+    )
+
+    print(
+        "Opening TCP:",
+        MQTT_HOST,
+        MQTT_PORT
+    )
+
+    if not send_at(
+        command,
+        "CONNECT OK",
+        20000
+    ):
+        print("TCP reconnect: CIPSTART failed")
+        return False
+
+    time.sleep_ms(200)
+
+    # --------------------------------------------------------
+    # VERIFY CONNECTION
+    # --------------------------------------------------------
+
+    if not tcp_check():
+        print("TCP reconnect verification failed")
+        return False
+
+    print("")
+    print("========================================")
+    print("TCP CONNECTION RESTORED")
+    print("========================================")
+
+    return True
+
 
 # MODEM RESET
 def modem_reset():

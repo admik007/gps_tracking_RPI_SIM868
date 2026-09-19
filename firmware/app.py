@@ -283,16 +283,29 @@ while True:
                                 )
             else:
                 # =================================================
-                # MQTT OFFLINE
+                # MQTT OFFLINE -> SAVE TO PENDING
                 # =================================================
+
                 if logger is not None and logger.sd_ok:
+
                     try:
-                        logger.write(
+
+                        logger.cache(
                             record,
                             network_info
                         )
+
+                        print(
+                            "MQTT offline - point cached"
+                        )
+
                     except Exception as e:
-                        print("SD write error:", e)
+
+                        print(
+                            "Pending write error:",
+                            e
+                        )
+
                         logger.sd_ok = False
                         storage_status = "failed"
     # =====================================================
@@ -342,26 +355,92 @@ while True:
                 # =================================================
                 # MQTT RECONNECT
                 # =================================================
-		if not mqtt_ok:
-		    print("Trying TCP/MQTT reconnect")
-		    if modem.tcp_reconnect():
-		        if mqtt.mqtt_connect():
-		            mqtt_ok = True
-		            print("MQTT restored")
-		            mqtt.mqtt_publish(
-		                "gps/" +
-		                mqtt.CLIENT_ID +
-		                "/status",
-		                json.dumps({
-		                    "id": mqtt.CLIENT_ID,
-		                    "msg": "online"
-		                })
-		            )
-		        else:
-		            print("MQTT reconnect failed")
-		    else:
-		        print("TCP reconnect failed")
-            else:
+                # =================================================
+                # TCP + MQTT RECONNECT
+                # =================================================
+
+                if not mqtt_ok:
+
+                    print(
+                        "Trying TCP/MQTT reconnect"
+                    )
+
+                    # ---------------------------------------------
+                    # FIRST RESTORE TCP
+                    # ---------------------------------------------
+
+                    if modem.tcp_reconnect():
+
+                        print(
+                            "TCP ready, trying MQTT"
+                        )
+
+                        # -----------------------------------------
+                        # THEN RESTORE MQTT
+                        # -----------------------------------------
+
+                        if mqtt.mqtt_connect():
+
+                            mqtt_ok = True
+
+                            print(
+                                "MQTT restored"
+                            )
+
+                            # -------------------------------------
+                            # ONLINE STATUS
+                            # -------------------------------------
+
+                            mqtt.mqtt_publish(
+                                "gps/" +
+                                mqtt.CLIENT_ID +
+                                "/status",
+                                json.dumps({
+                                    "id": mqtt.CLIENT_ID,
+                                    "msg": "online"
+                                })
+                            )
+
+                            # =====================================
+                            # SEND ONE PENDING BATCH
+                            # =====================================
+                            if (
+                                logger is not None
+                                and logger.sd_ok
+                            ):
+                                try:
+                                    sent = (
+                                        logger.flush_pending(
+                                            mqtt_publish=
+                                            mqtt.mqtt_publish,
+                                            topic=(
+                                                "gps/" +
+                                                mqtt.CLIENT_ID +
+                                                "/location"
+                                            ),
+                                            device_id=
+                                            mqtt.CLIENT_ID,
+                                            batch_size=
+                                            PENDING_BATCH_SIZE
+                                        )
+                                    )
+                                    print(
+                                        "Pending batch sent:",
+                                        sent
+                                    )
+                                except Exception as e:
+                                    print(
+                                        "Pending send error:",
+                                        e
+                                    )
+                        else:
+                            print(
+                                "MQTT reconnect failed"
+                            )
+                    else:
+                        print(
+                            "TCP reconnect failed"
+                        )
                 # =================================================
                 # NO GSM
                 # =================================================
