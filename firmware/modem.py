@@ -27,6 +27,109 @@ def wait_resp_info(timeout=TIMEOUT):
  return info
 
 
+def tcp_reconnect():
+
+    print("TCP reconnect")
+
+    # =========================
+    # CHECK EXISTING SOCKET
+    # =========================
+    if tcp_check():
+        print("TCP already connected")
+        return True
+
+    # =========================
+    # RESET IP SESSION
+    # =========================
+    if not send_at(
+        "AT+CIPSHUT",
+        "SHUT OK",
+        10000
+    ):
+        print("TCP reconnect: CIPSHUT failed")
+        return False
+
+    time.sleep_ms(200)
+
+    # =========================
+    # APN
+    # =========================
+    if not send_at(
+        'AT+CSTT="internet"',
+        "OK"
+    ):
+        print("TCP reconnect: CSTT failed")
+        return False
+
+    time.sleep_ms(200)
+
+    # =========================
+    # BRING UP GPRS
+    # =========================
+    if not send_at(
+        "AT+CIICR",
+        "OK",
+        10000
+    ):
+        print("TCP reconnect: CIICR failed")
+        return False
+
+    time.sleep_ms(500)
+
+    # =========================
+    # GET IP
+    # =========================
+    if not send_at(
+        "AT+CIFSR",
+        "."
+    ):
+        print("TCP reconnect: CIFSR failed")
+        return False
+
+    time.sleep_ms(200)
+
+    # =========================
+    # OPEN TCP
+    # =========================
+    cmd = 'AT+CIPSTART="TCP","{}","{}"'.format(
+        MQTT_HOST,
+        MQTT_PORT
+    )
+
+    if not send_at(
+        cmd,
+        "CONNECT OK",
+        20000
+    ):
+        print("TCP reconnect: CIPSTART failed")
+        return False
+
+    time.sleep_ms(200)
+
+    # =========================
+    # VERIFY
+    # =========================
+    if not tcp_check():
+        print("TCP reconnect verification failed")
+        return False
+    print("TCP restored")
+    return True
+
+def tcp_check():
+    response = send_at_get_response(
+        "AT+CIPSTATUS",
+        "STATE:",
+        3000
+    )
+    try:
+        text = response.decode()
+    except:
+        return False
+    if "STATE: CONNECT OK" in text:
+        return True
+    return False
+
+
 # SEND AT COMMAND
 def send_at(cmd, back, timeout=TIMEOUT):
  t_start = utime.ticks_ms()
