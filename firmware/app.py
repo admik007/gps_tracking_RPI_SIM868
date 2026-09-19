@@ -342,7 +342,6 @@ while True:
                 # =================================================
                 # MQTT RECONNECT
                 # =================================================
-                if not mqtt_ok:
 		if not mqtt_ok:
 		    print("Trying TCP/MQTT reconnect")
 		    if modem.tcp_reconnect():
