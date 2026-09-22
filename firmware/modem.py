@@ -697,95 +697,66 @@ def wait_for_network(timeout=180):
 # ============================================================
 
 def get_network_info():
-
  total_start = ms()
-
  csq = 0
  creg = 0
  cgatt = 0
-
  # -------------------------
  # SIGNAL QUALITY
  # -------------------------
-
  t = ms()
-
  response = send_at_get_response(
   "AT+CSQ",
   "OK"
  )
-
  print_step("AT+CSQ", t)
-
  try:
   text = response.decode()
-
   if "+CSQ:" in text:
-
    value = text.split(
     "+CSQ:"
    )[1].split(",")[0].strip()
-
    csq = int(value)
-
    # 99 = unknown
    if csq == 99:
     csq = 0
-
  except Exception:
   csq = 0
 
  # -------------------------
  # NETWORK REGISTRATION
  # -------------------------
-
  t = ms()
-
  response = send_at_get_response(
   "AT+CREG?",
   "OK"
  )
-
  print_step("AT+CREG?", t)
-
  try:
   text = response.decode()
-
   if "+CREG:" in text:
-
    value = text.split(
     "+CREG:"
    )[1].split(",")[1].split()[0]
-
    creg = int(value)
-
  except Exception:
   creg = 0
-
  # -------------------------
  # GPRS ATTACH
  # -------------------------
-
  t = ms()
-
  response = send_at_get_response(
   "AT+CGATT?",
   "OK"
  )
-
  print_step("AT+CGATT?", t)
-
  try:
   text = response.decode()
-
   if "+CGATT:" in text:
-
    value = text.split(
     "+CGATT:"
    )[1].split()[0]
-
    cgatt = int(value)
-
  except Exception:
   cgatt = 0
 
@@ -805,6 +776,13 @@ def get_network_info():
   "creg": creg,
   "cgatt": cgatt
  }
+
+ bts = get_bts_info()
+ info["mcc"] = bts["mcc"]
+ info["mnc"] = bts["mnc"]
+ info["bsic"] = bts["bsic"]
+ info["cellid"] = bts["cellid"]
+ info["lac"] = bts["lac"]
 
 # ============================================================
 # TCP CONNECTION CHECK
@@ -966,20 +944,86 @@ def tcp_reconnect():
 
 # MODEM RESET
 def modem_reset():
-
  print("Resetting modem with AT+CFUN=1,1")
 
  gsm_module.write(
   b"AT+CFUN=1,1\r\n"
  )
-
  # SIM868 sa teraz môže reštartovať.
  # Odpoveď nemusí byť spoľahlivo dostupná.
-
  time.sleep(10)
-
  print("Modem reset wait completed")
-
  return True
+
+
+# MODEM GET BTS INFO
+def get_bts_info():
+    result = {
+        "mcc": 0,
+        "mnc": 0,
+        "bsic": 0,
+        "cellid": 0,
+        "lac": 0
+    }
+    try:
+        # Enable engineering mode
+        if not send_at(
+            "AT+CENG=4,0",
+            "OK",
+            3000
+        ):
+            print("CENG enable failed")
+            return result
+        # Query BTS
+        response = send_at_get_response(
+            "AT+CENG?",
+            "OK",
+            3000
+        )
+        try:
+            text = response.decode()
+        except:
+            text = str(response)
+        print("CENG response:")
+        print(text)
+        # Find serving cell line
+        for line in text.splitlines():
+            line = line.strip()
+            if not line.startswith("+CENG: 4"):
+                continue
+            parts = line.split(",")
+            if len(parts) < 10:
+                print("Invalid CENG response")
+                continue
+            try:
+                result["mcc"] = int(parts[5])
+                result["mnc"] = int(parts[6])
+                result["bsic"] = int(parts[7])
+
+                result["cellid"] = int(
+                    parts[8],
+                    16
+                )
+                result["lac"] = int(
+                    parts[9],
+                    16
+                )
+            except Exception as e:
+                print(
+                    "CENG parse error:",
+                    e
+                )
+            break
+    except Exception as e:
+        print(
+            "BTS info error:",
+            e
+        )
+    print(
+        "BTS info:",
+        result
+    )
+    return result
+
 #####################  DEFINITION OF FUNCTIONS  #####################
 #####################################################################
