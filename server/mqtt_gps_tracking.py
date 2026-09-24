@@ -30,62 +30,223 @@ db = mysql.connector.connect(
 cursor = db.cursor()
 
 # =========================
-# MYSQL INSERT
+# GPS TIME
 # =========================
+
 def normalize_gps_time(value):
+
     if not value:
         return None
+
     try:
-        # -------------------------
-        # BATCH / OLD PENDING FORMAT
+
+        # ---------------------------------
+        # OLD PENDING FORMAT
+        #
         # 2026-08-08T131928.000Z
-        # -------------------------
+        # ->
+        # 2026-08-08T13:19:28.000Z
+        # ---------------------------------
+
         if "T" in value:
+
             date_part, time_part = value.split("T", 1)
+
             time_part = time_part.rstrip("Z")
-            # 131928.000
-            if len(time_part) >= 10 and ":" not in time_part:
+
+            if (
+                len(time_part) >= 6
+                and ":" not in time_part
+            ):
+
                 time_part = (
                     time_part[0:2] + ":" +
                     time_part[2:4] + ":" +
                     time_part[4:]
                 )
-            value = date_part + "T" + time_part + "Z"
-        return value
-    except Exception as e:
-        print("GPS time conversion error:", e)
+
+            value = (
+                date_part +
+                "T" +
+                time_part +
+                "Z"
+            )
+
         return value
 
+    except Exception as e:
+
+        print(
+            "GPS time conversion error:",
+            e
+        )
+
+        return value
+
+
+# =========================
+# SAFE CONVERSIONS
+# =========================
+
+def safe_int(value, default=0):
+
+    try:
+        return int(value)
+    except:
+        return default
+
+
+def safe_float(value, default=0.0):
+
+    try:
+        return float(value)
+    except:
+        return default
+
+
+def safe_bool(value, default=True):
+
+    if isinstance(value, bool):
+        return value
+
+    if value is None:
+        return default
+
+    if isinstance(value, int):
+        return value != 0
+
+    value = str(value).lower()
+
+    if value in (
+        "true",
+        "1",
+        "yes"
+    ):
+        return True
+
+    if value in (
+        "false",
+        "0",
+        "no"
+    ):
+        return False
+
+    return default
+
+
+# =========================
+# MYSQL INSERT
+# =========================
 
 def insert_record(data, device_id):
 
-    # -------------------------
-    # DATA
-    # -------------------------
+    # =====================================================
+    # GPS DATA
+    # =====================================================
 
-    lat = float(data.get("lat", 0))
-    lon = float(data.get("lon", 0))
-    alt = float(data.get("alt", 0))
-    spd = float(data.get("spd", 0))
-    sat = int(data.get("sat", 0))
-    direction = float(data.get("dir", 0))
+    lat = safe_float(
+        data.get("lat", 0)
+    )
 
-    provider = int(data.get("creg", 0))
-    signal = int(data.get("csq", 0))
-    cputemp = data.get("cputemp", "")
+    lon = safe_float(
+        data.get("lon", 0)
+    )
 
-    # GPS TIME - UTC
-    gps_time = normalize_gps_time(data.get("time", ""))
+    alt = safe_float(
+        data.get("alt", 0)
+    )
 
-    # -------------------------
+    spd = safe_float(
+        data.get("spd", 0)
+    )
+
+    sat = safe_int(
+        data.get("sat", 0)
+    )
+
+    direction = safe_float(
+        data.get("dir", 0)
+    )
+
+    gps_valid = safe_bool(
+        data.get(
+            "gps_valid",
+            True
+        )
+    )
+
+
+    # =====================================================
+    # NETWORK DATA
+    # =====================================================
+
+    csq = safe_int(
+        data.get("csq", 0)
+    )
+
+    creg = safe_int(
+        data.get("creg", 0)
+    )
+
+    cgatt = safe_int(
+        data.get("cgatt", 0)
+    )
+
+    # MCC / MNC intentionally strings
+    mcc = str(
+        data.get("mcc", "")
+    )
+
+    mnc = str(
+        data.get("mnc", "")
+    )
+
+    bsic = safe_int(
+        data.get("bsic", 0)
+    )
+
+    cellid = safe_int(
+        data.get("cellid", 0)
+    )
+
+    lac = safe_int(
+        data.get("lac", 0)
+    )
+
+
+    # =====================================================
+    # LEGACY DATA
+    # =====================================================
+
+    cputemp = data.get(
+        "cputemp",
+        ""
+    )
+
+    # Existing fields kept for compatibility
+    provider = creg
+    signal = csq
+
+
+    # =====================================================
+    # GPS TIME
+    # =====================================================
+
+    gps_time = normalize_gps_time(
+        data.get("time", "")
+    )
+
+
+    # =====================================================
     # SERVER TIME
-    # -------------------------
+    # =====================================================
 
     now = datetime.now()
 
-    # -------------------------
+
+    # =====================================================
     # MYSQL
-    # -------------------------
+    # =====================================================
 
     sql = """
     INSERT INTO gps_tracking
@@ -110,18 +271,33 @@ def insert_record(data, device_id):
         direction,
         devicerpi,
         temprpi,
-        loadrpi
+        loadrpi,
+
+        gps_valid,
+        creg,
+        cgatt,
+        csq,
+        mcc,
+        mnc,
+        bsic,
+        cellid,
+        lac
     )
     VALUES
     (
         %s, %s, %s, %s, %s, %s,
         %s, %s, %s,
         %s, %s, %s, %s, %s, %s,
-        %s, %s, %s, %s, %s, %s
+        %s, %s, %s, %s, %s, %s,
+
+        %s, %s, %s, %s,
+        %s, %s, %s, %s, %s
     )
     """
 
     values = (
+
+        # GPS
         lat,
         lon,
         alt,
@@ -129,43 +305,95 @@ def insert_record(data, device_id):
         spd,
         sat,
         gps_time,
+
+        # legacy
         100.0,
         "",
+
+        # server date/time
         now.year,
         now.strftime("%m"),
         now.strftime("%d"),
         now.strftime("%H"),
         now.strftime("%M"),
         now.strftime("%S"),
+
         "",
+
+        # legacy provider
         provider,
+
         direction,
+
         device_id,
         cputemp,
-        signal
+        signal,
+
+        # new fields
+        1 if gps_valid else 0,
+        creg,
+        cgatt,
+        csq,
+        mcc,
+        mnc,
+        bsic,
+        cellid,
+        lac
     )
 
-    cursor.execute(sql, values)
+    cursor.execute(
+        sql,
+        values
+    )
 
 
 # =========================
 # MQTT
 # =========================
 
-def on_connect(client, userdata, flags, rc):
+def on_connect(
+    client,
+    userdata,
+    flags,
+    rc
+):
 
-    print("MQTT connected:", rc)
+    print(
+        "MQTT connected:",
+        rc
+    )
 
-    client.subscribe(MQTT_TOPIC)
+    client.subscribe(
+        MQTT_TOPIC
+    )
 
-    print("Subscribed:", MQTT_TOPIC)
+    print(
+        "Subscribed:",
+        MQTT_TOPIC
+    )
 
 
-def on_message(client, userdata, msg):
+# =========================
+# MQTT MESSAGE
+# =========================
+
+def on_message(
+    client,
+    userdata,
+    msg
+):
 
     print()
-    print("MQTT:", msg.topic)
-    print("DATA:", msg.payload)
+
+    print(
+        "MQTT:",
+        msg.topic
+    )
+
+    print(
+        "DATA:",
+        msg.payload
+    )
 
     try:
 
@@ -173,17 +401,27 @@ def on_message(client, userdata, msg):
             msg.payload.decode()
         )
 
-        # -------------------------
-        # DEVICE ID Z TOPICU
-        # -------------------------
+        # =================================================
+        # DEVICE ID FROM TOPIC
+        # =================================================
 
         parts = msg.topic.split("/")
 
+        if len(parts) < 3:
+
+            print(
+                "Invalid MQTT topic:",
+                msg.topic
+            )
+
+            return
+
         device_id = parts[1]
 
-        # =====================================================
+
+        # =================================================
         # BATCH
-        # =====================================================
+        # =================================================
 
         if "points" in data:
 
@@ -224,13 +462,16 @@ def on_message(client, userdata, msg):
                 len(points)
             )
 
-        # =====================================================
+
+        # =================================================
         # SINGLE RECORD
-        # =====================================================
+        # =================================================
 
         else:
 
-            print("MQTT SINGLE RECORD")
+            print(
+                "MQTT SINGLE RECORD"
+            )
 
             insert_record(
                 data,
@@ -239,11 +480,22 @@ def on_message(client, userdata, msg):
 
             db.commit()
 
-            print("MYSQL: inserted")
+            print(
+                "MYSQL: inserted"
+            )
+
 
     except Exception as e:
 
-        print("ERROR:", e)
+        print(
+            "ERROR:",
+            e
+        )
+
+        try:
+            db.rollback()
+        except:
+            pass
 
 
 # =========================
@@ -255,7 +507,9 @@ client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
 
-print("Connecting MQTT...")
+print(
+    "Connecting MQTT..."
+)
 
 client.connect(
     MQTT_HOST,
@@ -264,3 +518,4 @@ client.connect(
 )
 
 client.loop_forever()
+

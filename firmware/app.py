@@ -79,7 +79,12 @@ if modem.modem_init():
         network_info = {
             "csq": 0,
             "creg": 0,
-            "cgatt": 0
+            "cgatt": 0,
+            "mcc": "",
+            "mnc": "",
+            "bsic": 0,
+            "cellid": 0,
+            "lac": 0
         }
     # =========================
     # MQTT CONNECT
@@ -104,7 +109,12 @@ else:
     network_info = {
         "csq": 0,
         "creg": 0,
-        "cgatt": 0
+        "cgatt": 0,
+        "mcc": "",
+        "mnc": "",
+        "bsic": 0,
+        "cellid": 0,
+        "lac": 0
     }
 # =========================
 # TIMERS
@@ -161,7 +171,13 @@ while True:
                 "sat": point["sat"],
                 "csq": network_info["csq"],
                 "creg": network_info["creg"],
-                "cgatt": network_info["cgatt"]
+                "cgatt": network_info["cgatt"],
+                "mcc": network_info.get("mcc", ""),
+                "mnc": network_info.get("mnc", ""),
+                "bsic": network_info.get("bsic", 0),
+                "cellid": network_info.get("cellid", 0),
+                "lac": network_info.get("lac", 0),
+                "gps_valid": True
             }
             # =================================================
             # PERMANENT SD LOG
@@ -199,6 +215,12 @@ while True:
                         "csq": network_info["csq"],
                         "creg": network_info["creg"],
                         "cgatt": network_info["cgatt"],
+                        "mcc": network_info.get("mcc", ""),
+                        "mnc": network_info.get("mnc", ""),
+                        "bsic": network_info.get("bsic", 0),
+                        "cellid": network_info.get("cellid", 0),
+                        "lac": network_info.get("lac", 0),
+                        "gps_valid": True,
                         "time": gps.gps_datetime(),
                         "storage": get_storage_status()
                     }
@@ -309,6 +331,54 @@ while True:
                         logger.sd_ok = False
                         storage_status = "failed"
     # =====================================================
+    # GPS NO FIX -> MQTT HEARTBEAT WITH LAST KNOWN POSITION
+    # =====================================================
+    # GPS.point keeps the last valid coordinates because an invalid
+    # RMC sentence only changes point["valid"]. This lets the server
+    # see the last known position while gps_valid=False. Before the
+    # first ever fix, lat/lon remain 0.0. Invalid GPS heartbeats are
+    # intentionally NOT written to the permanent log or pending queue.
+    if not point["valid"] and mqtt_ok:
+        if time.time() - last_publish >= PUBLISH_INTERVAL:
+            payload = {
+                "id": mqtt.CLIENT_ID,
+                "lat": point["lat"],
+                "lon": point["lon"],
+                "spd": point["spd"],
+                "alt": point["alt"],
+                "sat": point["sat"],
+                "dir": point["dir"],
+                "csq": network_info["csq"],
+                "creg": network_info["creg"],
+                "cgatt": network_info["cgatt"],
+                "mcc": network_info.get("mcc", ""),
+                "mnc": network_info.get("mnc", ""),
+                "bsic": network_info.get("bsic", 0),
+                "cellid": network_info.get("cellid", 0),
+                "lac": network_info.get("lac", 0),
+                "gps_valid": False,
+                "time": gps.gps_datetime(),
+                "storage": get_storage_status()
+            }
+
+            try:
+                result = mqtt.mqtt_publish(
+                    "gps/" + mqtt.CLIENT_ID + "/location",
+                    json.dumps(payload)
+                )
+
+                if result:
+                    last_publish = time.time()
+                    print("GPS unavailable - heartbeat sent")
+                else:
+                    print("MQTT lost during GPS heartbeat")
+                    mqtt_ok = False
+
+            except Exception as e:
+                print("MQTT heartbeat error:", e)
+                mqtt_ok = False
+
+    # =====================================================
     # NETWORK INFO
     # =====================================================
     if (
@@ -330,7 +400,12 @@ while True:
             network_info = {
                 "csq": 0,
                 "creg": 0,
-                "cgatt": 0
+                "cgatt": 0,
+                "mcc": "",
+                "mnc": "",
+                "bsic": 0,
+                "cellid": 0,
+                "lac": 0
             }
     # =====================================================
     # NETWORK CHECK
@@ -497,7 +572,12 @@ while True:
                                 network_info = {
                                     "csq": 0,
                                     "creg": 0,
-                                    "cgatt": 0
+                                    "cgatt": 0,
+                                    "mcc": "",
+                                    "mnc": "",
+                                    "bsic": 0,
+                                    "cellid": 0,
+                                    "lac": 0
                                 }
                             # =================================================
                             # MQTT
@@ -573,7 +653,12 @@ while True:
             network_info = {
                 "csq": 0,
                 "creg": 0,
-                "cgatt": 0
+                "cgatt": 0,
+                "mcc": "",
+                "mnc": "",
+                "bsic": 0,
+                "cellid": 0,
+                "lac": 0
             }
     # =====================================================
     # SMALL DELAY

@@ -480,7 +480,10 @@ echo $calendar->show();
   <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Miesto</b></font></td>
   <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>ŠPZ</b></font></td>
   <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Provider</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Signal</b></font></td>
+  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>GPS</b></font></td>
+  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Operator</b></font></td>
+  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>BTS Signal</b></font></td>
+  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>CellID</b></font></td>
  </tr>
 ";
  $WEB_MIDDLE="";
@@ -576,7 +579,10 @@ if ($entries['lat'] == '0.000000' ){
   <td bgcolor="'.$bgmiesto.'">'.$miesto.'</td>
   <td bgcolor="'.$bgmiesto.'">'.$SPZ.'</td>
   <td bgcolor="'.$bgmiesto.'">'.$provider.'</td>
-  <td bgcolor="'.$bgmiesto.'">'.$entries['loadrpi'].'</td>
+  <td bgcolor="'.$bgmiesto.'">'.$entries['gps_valid'].'</td>
+  <td bgcolor="'.$bgmiesto.'">'.$entries['mcc'].$entries['mnc'].'</td>
+  <td bgcolor="'.$bgmiesto.'">'.$entries['csq'].'</td>
+  <td bgcolor="'.$bgmiesto.'">'.$entries['cellid'].'</td>
  </tr>
 '; 
 

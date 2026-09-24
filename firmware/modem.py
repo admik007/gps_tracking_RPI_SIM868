@@ -27,109 +27,6 @@ def wait_resp_info(timeout=TIMEOUT):
  return info
 
 
-def tcp_reconnect():
-
-    print("TCP reconnect")
-
-    # =========================
-    # CHECK EXISTING SOCKET
-    # =========================
-    if tcp_check():
-        print("TCP already connected")
-        return True
-
-    # =========================
-    # RESET IP SESSION
-    # =========================
-    if not send_at(
-        "AT+CIPSHUT",
-        "SHUT OK",
-        10000
-    ):
-        print("TCP reconnect: CIPSHUT failed")
-        return False
-
-    time.sleep_ms(200)
-
-    # =========================
-    # APN
-    # =========================
-    if not send_at(
-        'AT+CSTT="internet"',
-        "OK"
-    ):
-        print("TCP reconnect: CSTT failed")
-        return False
-
-    time.sleep_ms(200)
-
-    # =========================
-    # BRING UP GPRS
-    # =========================
-    if not send_at(
-        "AT+CIICR",
-        "OK",
-        10000
-    ):
-        print("TCP reconnect: CIICR failed")
-        return False
-
-    time.sleep_ms(500)
-
-    # =========================
-    # GET IP
-    # =========================
-    if not send_at(
-        "AT+CIFSR",
-        "."
-    ):
-        print("TCP reconnect: CIFSR failed")
-        return False
-
-    time.sleep_ms(200)
-
-    # =========================
-    # OPEN TCP
-    # =========================
-    cmd = 'AT+CIPSTART="TCP","{}","{}"'.format(
-        MQTT_HOST,
-        MQTT_PORT
-    )
-
-    if not send_at(
-        cmd,
-        "CONNECT OK",
-        20000
-    ):
-        print("TCP reconnect: CIPSTART failed")
-        return False
-
-    time.sleep_ms(200)
-
-    # =========================
-    # VERIFY
-    # =========================
-    if not tcp_check():
-        print("TCP reconnect verification failed")
-        return False
-    print("TCP restored")
-    return True
-
-def tcp_check():
-    response = send_at_get_response(
-        "AT+CIPSTATUS",
-        "STATE:",
-        3000
-    )
-    try:
-        text = response.decode()
-    except:
-        return False
-    if "STATE: CONNECT OK" in text:
-        return True
-    return False
-
-
 # SEND AT COMMAND
 def send_at(cmd, back, timeout=TIMEOUT):
  t_start = utime.ticks_ms()
@@ -771,18 +668,18 @@ def get_network_info():
   )
  )
 
+ bts = get_bts_info()
+
  return {
   "csq": csq,
   "creg": creg,
-  "cgatt": cgatt
+  "cgatt": cgatt,
+  "mcc": bts["mcc"],
+  "mnc": bts["mnc"],
+  "bsic": bts["bsic"],
+  "cellid": bts["cellid"],
+  "lac": bts["lac"]
  }
-
- bts = get_bts_info()
- info["mcc"] = bts["mcc"]
- info["mnc"] = bts["mnc"]
- info["bsic"] = bts["bsic"]
- info["cellid"] = bts["cellid"]
- info["lac"] = bts["lac"]
 
 # ============================================================
 # TCP CONNECTION CHECK
@@ -959,8 +856,8 @@ def modem_reset():
 # MODEM GET BTS INFO
 def get_bts_info():
     result = {
-        "mcc": 0,
-        "mnc": 0,
+        "mcc": "",
+        "mnc": "",
         "bsic": 0,
         "cellid": 0,
         "lac": 0
@@ -996,16 +893,16 @@ def get_bts_info():
                 print("Invalid CENG response")
                 continue
             try:
-                result["mcc"] = int(parts[5])
-                result["mnc"] = int(parts[6])
-                result["bsic"] = int(parts[7])
+                result["mcc"] = parts[5].strip().strip('"')
+                result["mnc"] = parts[6].strip().strip('"')
+                result["bsic"] = int(parts[7].strip().strip('"'))
 
                 result["cellid"] = int(
-                    parts[8],
+                    parts[8].strip().strip('"'),
                     16
                 )
                 result["lac"] = int(
-                    parts[9],
+                    parts[9].strip().strip('"'),
                     16
                 )
             except Exception as e:

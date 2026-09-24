@@ -158,9 +158,14 @@ class Logger:
             str(point["dir"]) + "," +
             str(point["alt"]) + "," +
             str(point["sat"]) + "," +
-            str(network_info["csq"]) + "," +
-            str(network_info["creg"]) + "," +
-            str(network_info["cgatt"]) + "\n"
+            str(network_info.get("csq", 0)) + "," +
+            str(network_info.get("creg", 0)) + "," +
+            str(network_info.get("cgatt", 0)) + "," +
+            str(network_info.get("mcc", "")) + "," +
+            str(network_info.get("mnc", "")) + "," +
+            str(network_info.get("bsic", 0)) + "," +
+            str(network_info.get("cellid", 0)) + "," +
+            str(network_info.get("lac", 0)) + "\n"
         )
 
     # =========================
@@ -598,8 +603,24 @@ class Logger:
                     "csq": int(fields[8]),
                     "creg": int(fields[9]),
                     "cgatt": int(fields[10]),
+                    "gps_valid": True,
                     "time": gps_time
                 }
+
+                # New format has BTS information appended to the
+                # original 11 fields. Old pending files remain valid.
+                if len(fields) >= 16:
+                    point["mcc"] = fields[11]
+                    point["mnc"] = fields[12]
+                    point["bsic"] = int(fields[13])
+                    point["cellid"] = int(fields[14])
+                    point["lac"] = int(fields[15])
+                else:
+                    point["mcc"] = ""
+                    point["mnc"] = ""
+                    point["bsic"] = 0
+                    point["cellid"] = 0
+                    point["lac"] = 0
 
                 points.append(point)
 
