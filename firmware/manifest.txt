@@ -9,8 +9,4 @@ main.py
 modem.py
 mqtt.py
 sdcard.py
-test_buffer.py
-test_logger.py
-test_modem.py
-test_mqtt.py
 trackpoint.py
