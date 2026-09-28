@@ -696,6 +696,69 @@ def wait_for_network(timeout=180):
 # GET NETWORK INFO
 # ============================================================
 
+def get_bts_info():
+
+ result = {
+  "mcc": "",
+  "mnc": "",
+  "bsic": 0,
+  "cellid": 0,
+  "lac": 0
+ }
+
+ try:
+  if not send_at(
+   "AT+CENG=4,0",
+   "OK",
+   3000
+  ):
+   print("CENG enable failed")
+   return result
+
+  response = send_at_get_response(
+   "AT+CENG?",
+   "OK",
+   3000
+  )
+
+  try:
+   text = response.decode()
+  except Exception:
+   text = str(response)
+
+  print("CENG response:")
+  print(text)
+
+  for line in text.splitlines():
+   line = line.strip()
+
+   if not line.startswith("+CENG: 4"):
+    continue
+
+   parts = line.split(",")
+
+   if len(parts) < 10:
+    print("Invalid CENG response:", line)
+    continue
+
+   try:
+    result["mcc"] = parts[5].strip().strip('"')
+    result["mnc"] = parts[6].strip().strip('"')
+    result["bsic"] = int(parts[7].strip().strip('"'))
+    result["cellid"] = int(parts[8].strip().strip('"'), 16)
+    result["lac"] = int(parts[9].strip().strip('"'), 16)
+   except Exception as e:
+    print("CENG parse error:", e)
+
+   break
+
+ except Exception as e:
+  print("BTS info error:", e)
+
+ print("BTS info:", result)
+ return result
+
+
 def get_network_info():
 
  total_start = ms()
@@ -707,91 +770,63 @@ def get_network_info():
  # -------------------------
  # SIGNAL QUALITY
  # -------------------------
-
  t = ms()
-
  response = send_at_get_response(
   "AT+CSQ",
   "OK"
  )
-
  print_step("AT+CSQ", t)
 
  try:
   text = response.decode()
-
   if "+CSQ:" in text:
-
-   value = text.split(
-    "+CSQ:"
-   )[1].split(",")[0].strip()
-
+   value = text.split("+CSQ:")[1].split(",")[0].strip()
    csq = int(value)
-
-   # 99 = unknown
    if csq == 99:
     csq = 0
-
  except Exception:
   csq = 0
 
  # -------------------------
  # NETWORK REGISTRATION
  # -------------------------
-
  t = ms()
-
  response = send_at_get_response(
   "AT+CREG?",
   "OK"
  )
-
  print_step("AT+CREG?", t)
 
  try:
   text = response.decode()
-
   if "+CREG:" in text:
-
-   value = text.split(
-    "+CREG:"
-   )[1].split(",")[1].split()[0]
-
+   value = text.split("+CREG:")[1].split(",")[1].split()[0]
    creg = int(value)
-
  except Exception:
   creg = 0
 
  # -------------------------
  # GPRS ATTACH
  # -------------------------
-
  t = ms()
-
  response = send_at_get_response(
   "AT+CGATT?",
   "OK"
  )
-
  print_step("AT+CGATT?", t)
 
  try:
   text = response.decode()
-
   if "+CGATT:" in text:
-
-   value = text.split(
-    "+CGATT:"
-   )[1].split()[0]
-
+   value = text.split("+CGATT:")[1].split()[0]
    cgatt = int(value)
-
  except Exception:
   cgatt = 0
 
  # -------------------------
- # TOTAL
+ # SERVING BTS
  # -------------------------
+ bts = get_bts_info()
 
  print(
   "[TIME] get_network_info total: {} ms ({:.3f} s)".format(
@@ -803,7 +838,12 @@ def get_network_info():
  return {
   "csq": csq,
   "creg": creg,
-  "cgatt": cgatt
+  "cgatt": cgatt,
+  "mcc": bts["mcc"],
+  "mnc": bts["mnc"],
+  "bsic": bts["bsic"],
+  "cellid": bts["cellid"],
+  "lac": bts["lac"]
  }
 
 # ============================================================

@@ -2,6 +2,7 @@ from gps import GPS
 from logger import Logger
 
 import time, utime
+import machine
 import modem
 import mqtt
 import json
@@ -18,7 +19,7 @@ PUBLISH_INTERVAL = 5
 MODEM_RESET_INTERVAL = 300
 
 # Kolko zaznamov poslat naraz z cache
-PENDING_BATCH_SIZE = 8
+PENDING_BATCH_SIZE = 5
 
 
 # =========================
@@ -137,177 +138,147 @@ def get_storage_status():
 # =========================
 while True:
     led.toggle()
+
     # =====================================================
     # GPS READ
     # =====================================================
     point = gps.read()
-    if point["valid"]:
-        if point["ts"] != last_ts:
-            last_ts = point["ts"]
-            print(point)
-            # =================================================
-            # CREATE RECORD
-            # =================================================
-            record = {
-                "id": mqtt.CLIENT_ID,
-                "date": point["date"],
-                "ts": point["ts"],
-                "time": gps.gps_datetime(),
-                "lat": point["lat"],
-                "lon": point["lon"],
-                "spd": point["spd"],
-                "dir": point["dir"],
-                "alt": point["alt"],
-                "sat": point["sat"],
-                "csq": network_info["csq"],
-                "creg": network_info["creg"],
-                "cgatt": network_info["cgatt"]
-            }
-            # =================================================
-            # PERMANENT SD LOG
-            # =================================================
-            if logger is not None and logger.sd_ok:
-                try:
-                    logger.write(
-                        record,
-                        network_info
-                    )
-                except Exception as e:
-                    print(
-                        "SD write error:",
-                        e
-                    )
-            # =================================================
-            # CURRENT GPS PUBLISH
-            # =================================================
-            if mqtt_ok:
-                if (
-                    time.time() - last_publish
-                    >= PUBLISH_INTERVAL
-                ):
-                    # -----------------------------------------
-                    # CREATE CURRENT PAYLOAD
-                    # -----------------------------------------
-                    payload = {
-                        "id": mqtt.CLIENT_ID,
-                        "lat": point["lat"],
-                        "lon": point["lon"],
-                        "spd": point["spd"],
-                        "alt": point["alt"],
-                        "sat": point["sat"],
-                        "dir": point["dir"],
-                        "csq": network_info["csq"],
-                        "creg": network_info["creg"],
-                        "cgatt": network_info["cgatt"],
-                        "time": gps.gps_datetime(),
-                        "storage": get_storage_status()
-                    }
-                    message = json.dumps(payload)
-                    # -----------------------------------------
-                    # SEND CURRENT
-                    # -----------------------------------------
-                    try:
-                        result = mqtt.mqtt_publish(
-                            "gps/" +
-                            mqtt.CLIENT_ID +
-                            "/location",
-                            message
-                        )
-                        if result:
-                            last_publish = time.time()
-                            print(
-                                "Current GPS sent"
-                            )
-                            # ---------------------------------
-                            # AFTER CURRENT POINT:
-                            # TRY ONE CACHE BATCH
-                            # ---------------------------------
-                            if logger is not None and logger.sd_ok:
-                                try:
-                                    sent = logger.flush_pending(
-                                        mqtt_publish=mqtt.mqtt_publish,
-                                        topic=(
-                                            "gps/" +
-                                            mqtt.CLIENT_ID +
-                                            "/location"
-                                        ),
-                                        device_id=mqtt.CLIENT_ID,
-                                        batch_size=PENDING_BATCH_SIZE
-                                    )
-                                    if sent > 0:
-                                        print(
-                                            "Pending batch sent:",
-                                            sent
-                                        )
-                                except Exception as e:
+    record = None
 
-                                    print(
-                                        "Pending batch error:",
-                                        e
-                                    )
-                        else:
-                            print(
-                                "MQTT lost"
-                            )
-                            mqtt_ok = False
-                            # -----------------------------
-                            # CACHE CURRENT POINT
-                            # -----------------------------
-                            if logger is not None and logger.sd_ok:
-                                try:
-                                    logger.cache(
-                                        record,
-                                        network_info
-                                    )
-                                except Exception as e:
-                                    print(
-                                        "Pending write error:",
-                                        e
-                                    )
-                    except Exception as e:
-                        print(
-                            "MQTT publish error:",
-                            e
-                        )
-                        mqtt_ok = False
-                        if logger is not None and logger.sd_ok:
-                            try:
-                                logger.cache(
-                                    record,
-                                    network_info
-                                )
-                            except Exception as e:
-                                print(
-                                    "Pending write error:",
-                                    e
-                                )
-            else:
-                # =================================================
-                # MQTT OFFLINE -> SAVE TO PENDING
-                # =================================================
+    # =====================================================
+    # NEW VALID GPS POINT
+    # =====================================================
+    if point["valid"] and point["ts"] != last_ts:
+        last_ts = point["ts"]
+        print(point)
 
+        record = {
+            "id": mqtt.CLIENT_ID,
+            "date": point["date"],
+            "ts": point["ts"],
+            "time": gps.gps_datetime(),
+            "lat": point["lat"],
+            "lon": point["lon"],
+            "spd": point["spd"],
+            "dir": point["dir"],
+            "alt": point["alt"],
+            "sat": point["sat"],
+            "csq": network_info.get("csq", 0),
+            "creg": network_info.get("creg", 0),
+            "cgatt": network_info.get("cgatt", 0),
+            "mcc": network_info.get("mcc", ""),
+            "mnc": network_info.get("mnc", ""),
+            "bsic": network_info.get("bsic", 0),
+            "cellid": network_info.get("cellid", 0),
+            "lac": network_info.get("lac", 0),
+            "gps_valid": True
+        }
+
+        # Permanent SD log contains only real GPS fixes.
+        if logger is not None and logger.sd_ok:
+            try:
+                logger.write(record, network_info)
+            except Exception as e:
+                print("SD write error:", e)
+
+        # If MQTT is already known to be offline, cache every real GPS point.
+        if not mqtt_ok and logger is not None and logger.sd_ok:
+            try:
+                logger.cache(record, network_info)
+                print("MQTT offline - point cached")
+            except Exception as e:
+                print("Pending write error:", e)
+                logger.sd_ok = False
+                storage_status = "failed"
+
+    # =====================================================
+    # CURRENT MQTT PUBLISH
+    # =====================================================
+    # Publish also when GPS has no fix. In that case lat/lon (and movement
+    # values) are the last known values and gps_valid=False. No such
+    # heartbeat is written to the permanent log or pending queue.
+    if mqtt_ok and (time.time() - last_publish >= PUBLISH_INTERVAL):
+        payload = {
+            "id": mqtt.CLIENT_ID,
+            "lat": point["lat"],
+            "lon": point["lon"],
+            "spd": point["spd"],
+            "alt": point["alt"],
+            "sat": point["sat"],
+            "dir": point["dir"],
+            "csq": network_info.get("csq", 0),
+            "creg": network_info.get("creg", 0),
+            "cgatt": network_info.get("cgatt", 0),
+            "mcc": network_info.get("mcc", ""),
+            "mnc": network_info.get("mnc", ""),
+            "bsic": network_info.get("bsic", 0),
+            "cellid": network_info.get("cellid", 0),
+            "lac": network_info.get("lac", 0),
+            "gps_valid": bool(point["valid"]),
+            "time": gps.gps_datetime(),
+            "storage": get_storage_status()
+        }
+
+        message = json.dumps(payload)
+
+        try:
+            result = mqtt.mqtt_publish(
+                "gps/" + mqtt.CLIENT_ID + "/location",
+                message
+            )
+
+            if result:
+                last_publish = time.time()
+
+                if point["valid"]:
+                    print("Current GPS sent")
+                else:
+                    print("GPS unavailable - heartbeat sent")
+
+                # After each successful current/heartbeat message, try one
+                # pending batch. Five points stay below the SIM868 CIPSEND
+                # packet-size limit with the expanded JSON payload.
                 if logger is not None and logger.sd_ok:
-
                     try:
-
-                        logger.cache(
-                            record,
-                            network_info
+                        sent = logger.flush_pending(
+                            mqtt_publish=mqtt.mqtt_publish,
+                            topic=(
+                                "gps/" +
+                                mqtt.CLIENT_ID +
+                                "/location"
+                            ),
+                            device_id=mqtt.CLIENT_ID,
+                            batch_size=PENDING_BATCH_SIZE
                         )
 
-                        print(
-                            "MQTT offline - point cached"
-                        )
+                        if sent > 0:
+                            print("Pending batch sent:", sent)
 
                     except Exception as e:
+                        print("Pending batch error:", e)
 
-                        print(
-                            "Pending write error:",
-                            e
-                        )
+            else:
+                print("MQTT lost")
+                mqtt_ok = False
 
-                        logger.sd_ok = False
-                        storage_status = "failed"
+                # Cache only a newly-created real GPS point. Heartbeats with
+                # gps_valid=False must never enter pending.txt.
+                if record is not None and logger is not None and logger.sd_ok:
+                    try:
+                        logger.cache(record, network_info)
+                    except Exception as e:
+                        print("Pending write error:", e)
+
+        except Exception as e:
+            print("MQTT publish error:", e)
+            mqtt_ok = False
+
+            if record is not None and logger is not None and logger.sd_ok:
+                try:
+                    logger.cache(record, network_info)
+                except Exception as cache_error:
+                    print("Pending write error:", cache_error)
+
     # =====================================================
     # NETWORK INFO
     # =====================================================

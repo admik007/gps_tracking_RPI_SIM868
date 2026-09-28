@@ -8,7 +8,7 @@ PENDING_FILE = "/sd/pending.txt"
 PENDING_POS_FILE = "/sd/pending.pos"
 PENDING_POS_TMP = "/sd/pending.pos.tmp"
 
-BATCH_SIZE = 20
+BATCH_SIZE = 5
 
 
 class Logger:
@@ -143,11 +143,7 @@ class Logger:
     # =========================
     def point_line(self, point, network_info=None):
         if network_info is None:
-            network_info = {
-                "csq": 0,
-                "creg": 0,
-                "cgatt": 0
-            }
+            network_info = {}
 
         return (
             str(point["date"]) + "," +
@@ -158,9 +154,14 @@ class Logger:
             str(point["dir"]) + "," +
             str(point["alt"]) + "," +
             str(point["sat"]) + "," +
-            str(network_info["csq"]) + "," +
-            str(network_info["creg"]) + "," +
-            str(network_info["cgatt"]) + "\n"
+            str(network_info.get("csq", 0)) + "," +
+            str(network_info.get("creg", 0)) + "," +
+            str(network_info.get("cgatt", 0)) + "," +
+            str(network_info.get("mcc", "")) + "," +
+            str(network_info.get("mnc", "")) + "," +
+            str(network_info.get("bsic", 0)) + "," +
+            str(network_info.get("cellid", 0)) + "," +
+            str(network_info.get("lac", 0)) + "\n"
         )
 
     # =========================
@@ -598,8 +599,24 @@ class Logger:
                     "csq": int(fields[8]),
                     "creg": int(fields[9]),
                     "cgatt": int(fields[10]),
+                    "gps_valid": True,
                     "time": gps_time
                 }
+
+                # New pending format contains BTS fields.
+                # Old 11-field pending lines remain fully supported.
+                if len(fields) >= 16:
+                    point["mcc"] = fields[11]
+                    point["mnc"] = fields[12]
+                    point["bsic"] = int(fields[13] or 0)
+                    point["cellid"] = int(fields[14] or 0)
+                    point["lac"] = int(fields[15] or 0)
+                else:
+                    point["mcc"] = ""
+                    point["mnc"] = ""
+                    point["bsic"] = 0
+                    point["cellid"] = 0
+                    point["lac"] = 0
 
                 points.append(point)
 
