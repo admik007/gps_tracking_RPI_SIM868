@@ -3,6 +3,7 @@ Description=MQTT to GPS Logger
 After=network.target
 
 [Service]
+EnvironmentFile=/opt/gps_tracking_RPI_SIM868/server/mqtt_db_connect.conf
 ExecStart=/usr/bin/python3 /opt/gps_tracking_RPI_SIM868/server/mqtt_gps_tracking.py
 WorkingDirectory=/opt/gps_tracking_RPI_SIM868/server/
 Restart=always

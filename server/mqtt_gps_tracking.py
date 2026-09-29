@@ -7,14 +7,14 @@ from datetime import datetime
 # CONFIG
 # =========================
 
-MQTT_HOST = "localhost"
-MQTT_PORT = 1883
-MQTT_TOPIC = "gps/+/location"
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "gps/+/location")
 
-MYSQL_HOST = "localhost"
-MYSQL_USER = "xxxxxxxx"
-MYSQL_PASS = "xxxxxxxx"
-MYSQL_DB = "xxxxxxxx"
+MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
+MYSQL_USER = os.environ["MYSQL_USER"]
+MYSQL_PASS = os.environ["MYSQL_PASS"]
+MYSQL_DB = os.environ["MYSQL_DB"]
 
 # =========================
 # MYSQL
