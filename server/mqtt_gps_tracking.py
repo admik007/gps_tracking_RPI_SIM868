@@ -31,11 +31,56 @@ db = mysql.connector.connect(
 cursor = db.cursor()
 
 # =========================
+# HELPERS
+# =========================
+
+def safe_int(value, default=0):
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_float(value, default=0.0):
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_bool(value, default=True):
+    if value is None:
+        return default
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, (int, float)):
+        return value != 0
+
+    if isinstance(value, str):
+        return value.strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on"
+        )
+
+    return default
+
+
+# =========================
 # MYSQL INSERT
 # =========================
+
 def normalize_gps_time(value):
     if not value:
         return None
+
     try:
         # -------------------------
         # BATCH / OLD PENDING FORMAT
@@ -44,15 +89,18 @@ def normalize_gps_time(value):
         if "T" in value:
             date_part, time_part = value.split("T", 1)
             time_part = time_part.rstrip("Z")
-            # 131928.000
+
             if len(time_part) >= 10 and ":" not in time_part:
                 time_part = (
                     time_part[0:2] + ":" +
                     time_part[2:4] + ":" +
                     time_part[4:]
                 )
+
             value = date_part + "T" + time_part + "Z"
+
         return value
+
     except Exception as e:
         print("GPS time conversion error:", e)
         return value
@@ -61,22 +109,50 @@ def normalize_gps_time(value):
 def insert_record(data, device_id):
 
     # -------------------------
-    # DATA
+    # GPS DATA
     # -------------------------
 
-    lat = float(data.get("lat", 0))
-    lon = float(data.get("lon", 0))
-    alt = float(data.get("alt", 0))
-    spd = float(data.get("spd", 0))
-    sat = int(data.get("sat", 0))
-    direction = float(data.get("dir", 0))
+    lat = safe_float(data.get("lat"))
+    lon = safe_float(data.get("lon"))
+    alt = safe_float(data.get("alt"))
+    spd = safe_float(data.get("spd"))
+    sat = safe_int(data.get("sat"))
+    direction = safe_float(data.get("dir"))
 
-    provider = int(data.get("creg", 0))
-    signal = int(data.get("csq", 0))
+    # -------------------------
+    # NETWORK DATA
+    # -------------------------
+
+    csq = safe_int(data.get("csq"))
+    creg = safe_int(data.get("creg"))
+    cgatt = safe_int(data.get("cgatt"))
+
+    mcc = str(data.get("mcc", "") or "")
+    mnc = str(data.get("mnc", "") or "")
+
+    bsic = safe_int(data.get("bsic"))
+    cellid = safe_int(data.get("cellid"))
+    lac = safe_int(data.get("lac"))
+
+    # Old firmware/pending records do not contain gps_valid.
+    # Those records were created only from valid GPS fixes.
+    gps_valid = 1 if safe_bool(
+        data.get("gps_valid"),
+        True
+    ) else 0
+
+    # -------------------------
+    # LEGACY FIELDS
+    # -------------------------
+
+    provider = "gps"
+    loadrpi = 0
     cputemp = data.get("cputemp", "")
 
     # GPS TIME - UTC
-    gps_time = normalize_gps_time(data.get("time", ""))
+    gps_time = normalize_gps_time(
+        data.get("time", "")
+    )
 
     # -------------------------
     # SERVER TIME
@@ -111,14 +187,25 @@ def insert_record(data, device_id):
         direction,
         devicerpi,
         temprpi,
-        loadrpi
+        loadrpi,
+        gps_valid,
+        creg,
+        cgatt,
+        csq,
+        mcc,
+        mnc,
+        bsic,
+        cellid,
+        lac
     )
     VALUES
     (
         %s, %s, %s, %s, %s, %s,
         %s, %s, %s,
         %s, %s, %s, %s, %s, %s,
-        %s, %s, %s, %s, %s, %s
+        %s, %s, %s, %s, %s, %s,
+        %s, %s, %s, %s, %s, %s,
+        %s, %s, %s
     )
     """
 
@@ -143,7 +230,16 @@ def insert_record(data, device_id):
         direction,
         device_id,
         cputemp,
-        signal
+        loadrpi,
+        gps_valid,
+        creg,
+        cgatt,
+        csq,
+        mcc,
+        mnc,
+        bsic,
+        cellid,
+        lac
     )
 
     cursor.execute(sql, values)
