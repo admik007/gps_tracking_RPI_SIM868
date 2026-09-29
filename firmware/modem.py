@@ -697,7 +697,6 @@ def wait_for_network(timeout=180):
 # ============================================================
 
 def get_bts_info():
-
  result = {
   "mcc": "",
   "mnc": "",
