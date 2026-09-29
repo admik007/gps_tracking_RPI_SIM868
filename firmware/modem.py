@@ -998,28 +998,3 @@ def tcp_reconnect():
 
     print("")
     print("========================================")
-    print("TCP CONNECTION RESTORED")
-    print("========================================")
-
-    return True
-
-
-# MODEM RESET
-def modem_reset():
-
- print("Resetting modem with AT+CFUN=1,1")
-
- gsm_module.write(
-  b"AT+CFUN=1,1\r\n"
- )
-
- # SIM868 sa teraz môže reštartovať.
- # Odpoveď nemusí byť spoľahlivo dostupná.
-
- time.sleep(10)
-
- print("Modem reset wait completed")
-
- return True
-#####################  DEFINITION OF FUNCTIONS  #####################
-#####################################################################
