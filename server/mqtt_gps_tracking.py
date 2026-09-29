@@ -1,3 +1,4 @@
+import os
 import json
 import mysql.connector
 import paho.mqtt.client as mqtt
