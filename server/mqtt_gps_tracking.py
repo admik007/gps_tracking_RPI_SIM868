@@ -145,7 +145,7 @@ def insert_record(data, device_id):
     # LEGACY FIELDS
     # -------------------------
 
-    provider = "gps"
+    provider = 0
     loadrpi = 0
     cputemp = data.get("cputemp", "")
 
