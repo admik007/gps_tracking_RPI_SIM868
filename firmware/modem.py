@@ -731,21 +731,25 @@ def get_bts_info():
   for line in text.splitlines():
    line = line.strip()
 
-   if not line.startswith("+CENG: 4"):
+   # Serving cell is +CENG: 0.
+   # +CENG: 1.. are neighbouring cells.
+   if not line.startswith("+CENG: 0"):
     continue
 
    parts = line.split(",")
 
-   if len(parts) < 10:
+   # SIM868 AT+CENG=4,0 serving-cell format observed:
+   # +CENG: 0,"bcch,rxl,rxq,mcc,mnc,bsic,cellid,rla,txp,lac,..."
+   if len(parts) < 11:
     print("Invalid CENG response:", line)
     continue
 
    try:
-    result["mcc"] = parts[5].strip().strip('"')
-    result["mnc"] = parts[6].strip().strip('"')
-    result["bsic"] = int(parts[7].strip().strip('"'))
-    result["cellid"] = int(parts[8].strip().strip('"'), 16)
-    result["lac"] = int(parts[9].strip().strip('"'), 16)
+    result["mcc"] = parts[4].strip().strip('"')
+    result["mnc"] = parts[5].strip().strip('"')
+    result["bsic"] = int(parts[6].strip().strip('"'))
+    result["cellid"] = int(parts[7].strip().strip('"'), 16)
+    result["lac"] = int(parts[10].strip().strip('"'), 16)
    except Exception as e:
     print("CENG parse error:", e)
 
