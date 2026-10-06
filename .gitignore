@@ -1,4 +1,8 @@
 firmware/config.py
+server/web/.htaccess
 server/web/_config.php
+server/web/export.php
+server/web/osm_min_max.php
+server/web/osm_month.php
 server/mqtt_db_connect.conf
 GIT.sh

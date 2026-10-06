@@ -11,15 +11,19 @@ if (empty($_GET["time"])) {
  <meta http-equiv="Content-Type" content="text/html; charset=windows-1250">
  <meta http-equiv="Cache-control" content="no-cache">
  <meta http-equiv="Content-Language" content="sk">
+ <meta name="google-site-verification" content="GHY_X_yeijpdBowWr_AKSMWAT8WQ-ILU-Z441AsYG9A">
  <meta name="GOOGLEBOT" CONTENT="noodp">
  <meta name="pagerank" content="10">
  <meta name="msnbot" content="robots-terms">
+ <meta name="msvalidate.01" content="B786069E75B8F08919826E2B980B971A">
  <meta name="revisit-after" content="2 days">
  <meta name="robots" CONTENT="index, follow">
  <meta name="alexa" content="100">
  <meta name="distribution" content="Global">
  <meta name="keywords" lang="sk" content="gps, logging, tracking">
  <meta name="description" content="Webpage for GPS logging">
+ <meta name="Author" content="ZTK-Comp WEBHOSTING">
+ <meta name="copyright" content="(c) 2015 ZTK-Comp">
  <link href="calendar.css" type="text/css" rel="stylesheet">
 </head>
 <body bgcolor="silver">
@@ -92,9 +96,6 @@ if (empty($_POST["devicerpi"])) $_POST["devicerpi"]=$devicerpi;
 if (isset($_POST["devicerpi"])) $devicerpi=$_POST["devicerpi"];
 
 
-if (empty($_GET["provider"])) $provider="GPS";
-if (isset($_GET["provider"])) $provider=$_GET["provider"];
-
 if (empty($_GET["direction"])) $direction="0.0";
 if (isset($_GET["direction"])) $direction=$_GET["direction"];
 
@@ -124,103 +125,66 @@ if (isset($_GET["CELLID"])) $cellid=$_GET["CELLID"];
 
 if (empty($_GET["LAC"])) $lac="";
 if (isset($_GET["LAC"])) $lac=$_GET["LAC"];
-### BTS RELATED
-
-if (!empty($_GET["time"])) {
- $time=$_GET["time"];
- $timeT=str_replace("T","\T",$time);
- $timeZ=str_replace("Z","\Z",$timeT);
- $epoch= strtotime (gmdate($timeZ));
- date_default_timezone_set("Europe/Bratislava");
- $time=date ('Y-m-d\TH:i:s\Z',$epoch);
-
- if (isset($_GET["time"])) {
-  $time=$_GET["time"];
-  if (preg_match("/2000/", "$time")) {
-   $time=$year."-".$month."-".$day."T".$hour.":".$minute.":".$second."Z";
-  }
-
-  if (preg_match("/2004/", "$time")) {
-   $time=$year."-".$month."-".$day."T".$hour.":".$minute.":".$second."Z";
-  }
-
-  if (preg_match("/2021/", "$time")) {
-   $time=$year."-".$month."-".$day."T".$hour.":".$minute.":".$second."Z";
-  }
- }
 
 
- switch ($devicerpi) {
-  case "0000000000000001":
-   $device='Device_01';
-   break;
 
-  case "0000000000000002":
-   $device='Device_02';
-   break;
-
- }
-
-
- $DEVI=strstr( $devicerpi, "000000" );
- list($DATE, $TIME) = explode("T", $time);
- echo "D: $DATE <br>\n";
- echo "T: $TIME <br>\n";
- $TIME=trim($TIME, "Z");
- list($year, $month, $day) = explode("-", $DATE);
- list($hour, $minute, $second) = explode(":", $TIME);
-
- mysqli_query($spojenie,"INSERT INTO $MySQL_table1 VALUES('0','$lat','$lon','$alt','$acc','$spd','$sat','$time','$bat','$ip','$year','$month','$day','$hour','$minute','$second','$device','$provider','$direction','$devicerpi','$temprpi','$loadrpi')");
- echo "<b>DeviceRPI:</b> ".$devicerpi."<br>\n";
- echo "<b>Device:</b>    ".$device."<br>\n";
- echo "<b>Zapisane:</b>  ".$time."<br>\n";
+$REQUESTED=$month;
+$CURRENT=Date("m");
+$CURRENTLAST=date("m", strtotime( date( "Y-m-d", strtotime( date("Y-m-d") ) ) . "-0 month" ) );
+if (($CURRENT == $REQUESTED) || ($CURRENTLAST == $REQUESTED)) {
+ $MySQL_table=$MySQL_table1;
+}
+else {
+ $MySQL_table=$MySQL_table2;
+}
 
 
-} else {
+$count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi' AND time >= CONVERT_TZ('$year-$month-$day 00:00:00', 'Europe/Bratislava', 'UTC') AND time < CONVERT_TZ('$year-$month-$day 00:00:00' + INTERVAL 1 DAY, 'Europe/Bratislava', 'UTC') ";
+$count_result = mysqli_query($spojenie,$count_sql);
+$count_row = mysqli_fetch_assoc($count_result);
+$tracking_list_db_row_total = $count_row['total'];
 
- $REQUESTED=$month;
- $CURRENT=Date("m");
- $CURRENTLAST=date("m", strtotime( date( "Y-m-d", strtotime( date("Y-m-d") ) ) . "-0 month" ) );
- if (($CURRENT == $REQUESTED) || ($CURRENTLAST == $REQUESTED)) {
-  $MySQL_table=$MySQL_table1;
- }
- else {
-  $MySQL_table=$MySQL_table2;
- }
+$step = 1;
 
- $count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi' AND time >= '$year-$month-$day 00:00:00' AND time < '$year-$month-$day 23:59:59' ";
- $count_result = mysqli_query($spojenie,$count_sql);
- $count_row = mysqli_fetch_assoc($count_result);
- $tracking_list_db_row_total = $count_row['total'];
-
- $step = 1;
-
- if ($tracking_list_db_row_total > 3000) {
-  $step = 3;   // približne 1 bod/min
- }
- if ($tracking_list_db_row_total > 6000) {
-  $step = 6;   // približne 1 bod/min
- }
- if ($tracking_list_db_row_total > 20000) {
-  $step = 10;   // každý 10. bod
- }
- if ($tracking_list_db_row_total > 50000) {
-  $step = 30;
- }
-
- $sql = "SELECT *, time FROM $MySQL_table WHERE devicerpi='$devicerpi' AND time >= '$year-$month-$day 00:00:00' AND time < '$year-$month-$day 23:59:59' AND id MOD $step = 0 ORDER BY time DESC";
- $tracking_list_db = mysqli_query($spojenie,$sql);
+if ($tracking_list_db_row_total > 2000) {
+ $step = 2;   // približne 1 bod/min
+}
+if ($tracking_list_db_row_total > 4000) {
+ $step = 3;   // približne 1 bod/min
+}
+if ($tracking_list_db_row_total > 6000) {
+ $step = 4;   // približne 1 bod/min
+}
+if ($tracking_list_db_row_total > 8000) {
+ $step = 5;   // približne 1 bod/min
+}
+if ($tracking_list_db_row_total > 10000) {
+ $step = 6;   // približne 1 bod/min
+}
+if ($tracking_list_db_row_total > 15000) {
+ $step = 7;   // približne 1 bod/min
+}
+if ($tracking_list_db_row_total > 20000) {
+ $step = 10;   // každý 10. bod
+}
+if ($tracking_list_db_row_total > 25000) {
+ $step = 30;
+}
 
 
- $tracking_list_db_row = mysqli_num_rows ($tracking_list_db);
+$sql = "SELECT *, time FROM $MySQL_table WHERE devicerpi='$devicerpi' AND time >= CONVERT_TZ('$year-$month-$day 00:00:00', 'Europe/Bratislava', 'UTC') AND time <  CONVERT_TZ('$year-$month-$day 00:00:00' + INTERVAL 1 DAY, 'Europe/Bratislava', 'UTC') AND id MOD $step = 0 ORDER BY time DESC";
+$tracking_list_db = mysqli_query($spojenie,$sql);
 
- $tracking_list_db_devicesrpi = mysqli_query($spojenie,"SELECT DISTINCT(devicerpi) FROM $MySQL_table WHERE devicerpi != '' AND time like '$year-$month-$day%' order by device asc");
- $tracking_list_db_devicesrpi_row = mysqli_num_rows ($tracking_list_db_devicesrpi);
 
- $sql = "SELECT COUNT(DISTINCT devicerpi) AS total FROM $MySQL_table WHERE devicerpi <> '' ";
- $result = mysqli_query($spojenie,$sql);
- $row = mysqli_fetch_assoc($result);
- $tracking_list_db_devicesrpi_total_row = $row['total'];
+$tracking_list_db_row = mysqli_num_rows ($tracking_list_db);
+
+$tracking_list_db_devicesrpi = mysqli_query($spojenie,"SELECT DISTINCT(devicerpi) FROM $MySQL_table WHERE devicerpi != '' AND time like '$year-$month-$day%' order by device asc");
+$tracking_list_db_devicesrpi_row = mysqli_num_rows ($tracking_list_db_devicesrpi);
+
+$sql = "SELECT COUNT(DISTINCT devicerpi) AS total FROM $MySQL_table WHERE devicerpi <> '' ";
+$result = mysqli_query($spojenie,$sql);
+$row = mysqli_fetch_assoc($result);
+$tracking_list_db_devicesrpi_total_row = $row['total'];
 
 
 if ( $devicerpi == '' ) {
@@ -262,9 +226,16 @@ echo "    </select>
   </td>
  </tr>
  <tr>
-  <td align=\"center\">
-   <a href=\"http://".$_SERVER["SERVER_NAME"]."/osm.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Zobraz mapu</b> ($tracking_list_db_row) / ($tracking_list_db_row_total)</a><br>
-   <a href=\"http://".$_SERVER["SERVER_NAME"]."/export.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Export Excel</a><br>
+  <td align=\"center\">";
+ if ($tracking_list_db_row != "0") {
+  echo $tracking_list_db_row." / ".$tracking_list_db_row_total."<br>";
+ } else {
+  echo "<br>";
+ }
+echo "   <a href=\"http://".$_SERVER["SERVER_NAME"]."/osm.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Zobraz dnesnu mapu</b> </a><br>
+   <a href=\"http://".$_SERVER["SERVER_NAME"]."/osm_month.php?year=$year&amp;month=$month&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Zobraz mapu - mesiac</b> </a><br>
+<!--   <a href=\"http://".$_SERVER["SERVER_NAME"]."/export.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Export Excel</a><br>
+-->
 </table>\n\n";
 
 ############################################
@@ -470,18 +441,39 @@ echo $calendar->show();
  $WEB_HEADER="
 <table align=\"center\" border=\"1\" cellpadding=\"0\" cellspacing=\"0\">
  <tr>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>ID</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Súradnice</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Nadm. výška</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Rýchlosť</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Smer</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Satelity</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Čas</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Miesto</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>ŠPZ</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Provider</b></font></td>
-  <td bgcolor=\"#000000\"><font color=\"00FAAA\"><b>Signal</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>ID</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Súradnice</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Nadm. výška</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Rýchlosť</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Smer</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Satelity</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Čas</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Miesto</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>ŠPZ</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>GPS</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Network</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Signal</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Operator</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>CellID</b></font></td>
  </tr>
+
+ <tr>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
+  <td bgcolor=\"#000000\" align=\"center\">><font color=\"00FAAA\"><b>[Lat / Lon]</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>[m.n.m.]</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>[km/h]</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>[stav]</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>[Home / Roaming]</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
+ </tr>
+
 ";
  $WEB_MIDDLE="";
  $WEB_FOOTER="</table>\n\n";
@@ -534,30 +526,53 @@ echo $calendar->show();
   $lat_last=$entries['lat'];
   $lon_last=$entries['lon'];
 
-  #Priradenie custom SPZ
   $SPZ=$entries['device'];
   switch ($devicerpi) {
-   case "0000000000000001":
-    $SPZ="Device_11";
+   case "e661385283997828":
+    $SPZ="BMW_E46";
     break;
 
-   case "0000000000000002":
-    $SPZ='Device+12';
+   case "bd6718189a7ba68a":
+    $SPZ='BMW_E90';
     break;
   }
 
-  $provider=$entries['provider'];
-  switch ($provider) {
+
+  $network=$entries['creg'];
+  switch ($network) {
+   case "0":
+    $network="GSM Not Registered";
+    break;
+
+
    case "1":
-    $provider="Home";
+    $network="Home";
     break;
 
    case "5":
-    $provider='Roaming';
+    $network='Roaming';
     break;
   }
 
 
+  $gps_valid=$entries['gps_valid'];
+  switch ($gps_valid) {
+   case "0":
+    $gps_valid="no GPS";
+    break;
+
+   case "1":
+    $gps_valid='OK';
+    break;
+  }
+
+
+  if (($entries['csq'] > '0')  and ($entries['csq'] <  '10' )) { $csq='Veľmi slabý signál';}
+  if (($entries['csq'] > '90') and ($entries['csq'] <  '15' )) { $csq='Slabší signál';}
+  if (($entries['csq'] > '14') and ($entries['csq'] <  '20' )) { $csq='Dobrý signál';}
+  if (($entries['csq'] > '19') and ($entries['csq'] <  '26' )) { $csq='Veľmi dobrý signál';}
+  if (($entries['csq'] > '25') and ($entries['csq'] <  '35' )) { $csq='Výborný signál';}
+  if (($entries['csq'] == '0') or ($entries['csq'] == '99')) { $csq='Neznáma hodnota';}
 
 if ($entries['lat'] == '0.000000' ){
  $POS=round($entries['lat'],4).' / '.round($entries['lon'],4);
@@ -566,17 +581,20 @@ if ($entries['lat'] == '0.000000' ){
 }
 
   $WEB_MIDDLE=$WEB_MIDDLE.' <tr>
-  <td bgcolor="'.$bgmiesto.'">'.$i.'</td>
-  <td bgcolor="'.$bgmiesto.'">'.$POS.'</td>
-  <td bgcolor="'.$bgmiesto.'">'.round($entries['alt'],3).' m.n.m.</td>
-  <td bgcolor="'.$bgmiesto.'" >'.round($SPD,2).' km/h</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.$i.'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.$POS.'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.round($entries['alt'],3).'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.round($SPD,2).'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$direction.'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$entries['sat'].'</td>
-  <td bgcolor="'.$bgmiesto.'">'.(new DateTime($entries['time'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Europe/Bratislava'))->format('Y-m-d H:i:s').'</td>
-  <td bgcolor="'.$bgmiesto.'">'.$miesto.'</td>
-  <td bgcolor="'.$bgmiesto.'">'.$SPZ.'</td>
-  <td bgcolor="'.$bgmiesto.'">'.$provider.'</td>
-  <td bgcolor="'.$bgmiesto.'">'.$entries['loadrpi'].'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.(new DateTime($entries['time'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Europe/Bratislava'))->format('Y-m-d H:i:s').'</td>
+  <td bgcolor="'.$bgmiesto.'" align="left">'.$miesto.'</td>
+  <td bgcolor="'.$bgmiesto.'" align="left">'.$SPZ.'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.$gps_valid.'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.$network.'&nbsp;&nbsp;</td>
+  <td bgcolor="'.$bgmiesto.'" align="left">'.$entries['csq'].'-'.$csq.'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.$entries['mcc'].$entries['mnc'].'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.$entries['cellid'].'</td>
  </tr>
 '; 
 
@@ -591,7 +609,6 @@ if ($entries['lat'] == '0.000000' ){
  $mtime = explode(' ', microtime());
  $totaltime = $mtime[0] + $mtime[1] - $starttime;
  printf ('<font color="000DDA"> Stránka vygenerovaná za %.3f sekundy. </font>', $totaltime);
-}
 
 mysqli_close($spojenie);
 ?>
