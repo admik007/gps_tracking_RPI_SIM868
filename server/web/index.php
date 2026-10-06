@@ -172,7 +172,17 @@ if ($tracking_list_db_row_total > 25000) {
 }
 
 
-$sql = "SELECT *, time FROM $MySQL_table WHERE devicerpi='$devicerpi' AND time >= CONVERT_TZ('$year-$month-$day 00:00:00', 'Europe/Bratislava', 'UTC') AND time <  CONVERT_TZ('$year-$month-$day 00:00:00' + INTERVAL 1 DAY, 'Europe/Bratislava', 'UTC') AND id MOD $step = 0 ORDER BY time DESC";
+$sql = "SELECT g.*, COALESCE(b.address, '- - -') AS bts_address
+        FROM $MySQL_table g
+        LEFT JOIN $MySQL_table7 b
+          ON b.mcc = g.mcc
+         AND b.mnc = g.mnc
+         AND b.cellid = g.cellid
+        WHERE g.devicerpi='$devicerpi'
+          AND g.time >= CONVERT_TZ('$year-$month-$day 00:00:00', 'Europe/Bratislava', 'UTC')
+          AND g.time < CONVERT_TZ('$year-$month-$day 00:00:00' + INTERVAL 1 DAY, 'Europe/Bratislava', 'UTC')
+          AND g.id MOD $step = 0
+        ORDER BY g.time DESC";
 $tracking_list_db = mysqli_query($spojenie,$sql);
 
 
@@ -452,6 +462,7 @@ echo $calendar->show();
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Signal</b></font></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Operator</b></font></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>CellID</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>BTS adresa</b></font></td>
  </tr>
 
  <tr>
@@ -466,6 +477,7 @@ echo $calendar->show();
   <td bgcolor=\"#000000\" align=\"center\"></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>[stav]</b></font></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>[Home / Roaming]</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"></td>
   <td bgcolor=\"#000000\" align=\"center\"></td>
   <td bgcolor=\"#000000\" align=\"center\"></td>
   <td bgcolor=\"#000000\" align=\"center\"></td>
@@ -592,6 +604,7 @@ if ($entries['lat'] == '0.000000' ){
   <td bgcolor="'.$bgmiesto.'" align="left">'.$entries['csq'].'-'.$csq.'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$entries['mcc'].$entries['mnc'].'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$entries['cellid'].'</td>
+  <td bgcolor="'.$bgmiesto.'" align="left">'.$entries['bts_address'].'</td>
  </tr>
 '; 
 
