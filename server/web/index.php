@@ -233,9 +233,6 @@ echo "    </select>
   echo "<br>";
  }
 echo "   <a href=\"http://".$_SERVER["SERVER_NAME"]."/osm.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Zobraz dnesnu mapu</b> </a><br>
-   <a href=\"http://".$_SERVER["SERVER_NAME"]."/osm_month.php?year=$year&amp;month=$month&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Zobraz mapu - mesiac</b> </a><br>
-<!--   <a href=\"http://".$_SERVER["SERVER_NAME"]."/export.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Export Excel</a><br>
--->
 </table>\n\n";
 
 ############################################
