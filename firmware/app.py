@@ -6,6 +6,7 @@ import machine
 import modem
 import mqtt
 import json
+import gc
 
 BOOT_TIME = utime.ticks_ms()
 # =========================
@@ -18,6 +19,7 @@ PUBLISH_INTERVAL = 5
 
 MODEM_RESET_INTERVAL = 300
 MQTT_WATCHDOG_INTERVAL = 600
+GC_INTERVAL = 60
 
 # Kolko zaznamov poslat naraz z cache
 PENDING_BATCH_SIZE = 5
@@ -116,6 +118,7 @@ last_network_check = time.time()
 last_network_info = time.time()
 last_publish = 0
 last_mqtt_success = time.time()
+last_gc = time.time()
 gsm_failed_since = None
 # =========================
 # PENDING STATE
@@ -550,6 +553,19 @@ while True:
                 "creg": 0,
                 "cgatt": 0
             }
+    # =====================================================
+    # PERIODIC GARBAGE COLLECTION
+    # =====================================================
+    if time.time() - last_gc >= GC_INTERVAL:
+        gc.collect()
+        last_gc = time.time()
+
+        print(
+            "GC:",
+            "free =", gc.mem_free(),
+            "allocated =", gc.mem_alloc()
+        )
+
     # =====================================================
     # MQTT LIVENESS WATCHDOG
     # =====================================================
