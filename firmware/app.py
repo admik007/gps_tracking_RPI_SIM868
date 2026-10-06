@@ -17,6 +17,7 @@ NETWORK_INFO_INTERVAL = 60
 PUBLISH_INTERVAL = 5
 
 MODEM_RESET_INTERVAL = 300
+MQTT_WATCHDOG_INTERVAL = 600
 
 # Kolko zaznamov poslat naraz z cache
 PENDING_BATCH_SIZE = 5
@@ -114,6 +115,7 @@ last_ts = ""
 last_network_check = time.time()
 last_network_info = time.time()
 last_publish = 0
+last_mqtt_success = time.time()
 gsm_failed_since = None
 # =========================
 # PENDING STATE
@@ -229,6 +231,7 @@ while True:
 
             if result:
                 last_publish = time.time()
+                last_mqtt_success = time.time()
 
                 if point["valid"]:
                     print("Current GPS sent")
@@ -547,6 +550,21 @@ while True:
                 "creg": 0,
                 "cgatt": 0
             }
+    # =====================================================
+    # MQTT LIVENESS WATCHDOG
+    # =====================================================
+    # If GSM registration is healthy but no MQTT publish has
+    # succeeded for 10 minutes, restart the whole Pico. This
+    # recovers from stuck TCP/MQTT states that modem-only
+    # recovery may not clear.
+    if (
+        network_info.get("creg", 0) in (1, 5)
+        and time.time() - last_mqtt_success >= MQTT_WATCHDOG_INTERVAL
+    ):
+        print("MQTT watchdog timeout - resetting Pico")
+        time.sleep(1)
+        machine.reset()
+
     # =====================================================
     # SMALL DELAY
     # =====================================================

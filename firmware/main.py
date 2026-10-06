@@ -106,6 +106,6 @@ try:
     exec(open("app.py").read())
 except Exception as e:
     print("Application crashed:", e)
-    print("System will not reset automatically")
-    while True:
-        time.sleep(10)
+    print("Resetting system in 10 seconds")
+    time.sleep(10)
+    machine.reset()
