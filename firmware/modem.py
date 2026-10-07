@@ -398,6 +398,15 @@ def tcp_send(data):
     response += chunk
     print("SEND RX:", chunk)
     if b"SEND OK" in response:
+     # Preserve any TCP payload that arrived in the same UART read
+     # as SEND OK. MQTT CONNACK can arrive immediately after the
+     # CONNECT packet and must not be discarded here.
+     global TCP_RX_BUFFER
+     send_ok_pos = response.find(b"SEND OK") + len(b"SEND OK")
+     trailing = response[send_ok_pos:]
+     if trailing:
+      TCP_RX_BUFFER += trailing
+
      print(
       "[TIME] WAIT SEND RESULT:",
       time.ticks_diff(time.ticks_ms(), t),
@@ -440,12 +449,45 @@ def tcp_send(data):
  return False
 
 
+def tcp_receive(timeout=5000):
+ global TCP_RX_BUFFER
+
+ t_start = time.ticks_ms()
+ response = TCP_RX_BUFFER
+ TCP_RX_BUFFER = b''
+ last_data = t_start
+
+ while time.ticks_diff(time.ticks_ms(), t_start) < timeout:
+  if gsm_module.any():
+   chunk = gsm_module.read()
+   if chunk:
+    response += chunk
+    last_data = time.ticks_ms()
+
+    # MQTT CONNACK is four bytes. It can be raw or wrapped in
+    # SIM800/SIM868 +IPD framing; searching the accumulated bytes
+    # works in both cases.
+    if b'\x20\x02' in response:
+     break
+
+  # Once some data arrived, allow a short quiet period so that a
+  # fragmented UART response can complete without waiting the full
+  # timeout.
+  if response and time.ticks_diff(time.ticks_ms(), last_data) >= 200:
+   break
+
+  time.sleep_ms(1)
+
+ return response
+
+
 # SIM868 CONFIGURATION
 #sim_dtr = Pin(17, Pin.OUT)
 sim_pwr = Pin(14, Pin.OUT)
 uart_gsm_port = 0
 uart_gsm_baute = 115200
 gsm_module = machine.UART(uart_gsm_port, uart_gsm_baute)
+TCP_RX_BUFFER = b''
 print(gsm_module)
 
 

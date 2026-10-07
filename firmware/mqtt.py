@@ -88,12 +88,24 @@ def mqtt_connect():
 
     result = modem.tcp_send(packet)
 
-    if result:
+    if not result:
+        print("MQTT CONNECT send failed")
+        return False
 
+    response = modem.tcp_receive(5000)
+
+    print("MQTT CONNACK RX:")
+    print(response)
+
+    if b'\x20\x02\x00\x00' in response:
         print("MQTT connected")
         return True
 
-    print("MQTT connect failed")
+    if b'\x20\x02' in response:
+        print("MQTT CONNACK rejected or invalid")
+    else:
+        print("MQTT CONNACK timeout")
+
     return False
 
 
