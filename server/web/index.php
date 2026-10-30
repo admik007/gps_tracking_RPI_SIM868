@@ -402,25 +402,24 @@ class Calendar {
         $todayYmd = date('Ymd');
 
 
-        if ($cellContent == $todayday) {
-         $bgcolor="style=\"background: red!important\"";
-        } else {
-         $bgcolor="style=\"background: silver!important\"";
+        if ($this->currentDate === null) {
+            return '<li class="empty-day"></li>' . "\n";
         }
+        $classes = array();
+        if ($this->currentDate === date('Y-m-d')) $classes[] = 'today';
+        if ((int)$cellContent === (int)$this->selectedDAY) $classes[] = 'selected-day';
 
-        if ($cellContent == $this->selectedDAY) {
-         $bgcolor="style=\"background: lightgreen!important\"";
-        }
-
-        $devices = $this->currentDate === null ? array() : ($this->devicesByDay[$this->currentDate] ?? array());
-        $devicesTitle = htmlspecialchars(implode(', ', $devices), ENT_QUOTES, 'UTF-8');
-        $activity = count($devices) > 0 ? ' <small style="font-weight:bold;color:#075e24">('.count($devices).')</small>' : '';
-        return '<li '.$bgcolor.'> <a title="'.$devicesTitle.'" href="?year='.$this->currentYear.'&amp;month='.$this->currentMonth.'&amp;day='.$cellContent.'&amp;devicerpi='.rawurlencode($this->devicerpi).'">'.$cellContent.$activity.'</a> </li>
-';
+        $devices = $this->devicesByDay[$this->currentDate] ?? array();
+        $devicesTitle = htmlspecialchars(
+            count($devices) ? implode(', ', $devices) : 'Bez GPS záznamov',
+            ENT_QUOTES, 'UTF-8'
+        );
+        $activity = count($devices) > 0
+            ? '<span class="activity-count">'.count($devices).' voz.</span>'
+            : '';
+        return '<li class="'.implode(' ', $classes).'"><a title="'.$devicesTitle.'" href="?year='.$this->currentYear.'&amp;month='.$this->currentMonth.'&amp;day='.$cellContent.'&amp;devicerpi='.rawurlencode($this->devicerpi).'"><span>'.$cellContent.'</span>'.$activity.'</a></li>' . "\n";
     }
-    /**
-    * create navigation
-    */
+    /** Create calendar navigation */
     public function _createNavi(){
         $devicerpi = $this->devicerpi;
         $nextMonth = $this->currentMonth==12?1:intval($this->currentMonth)+1;
