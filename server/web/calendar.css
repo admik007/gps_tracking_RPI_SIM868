@@ -224,3 +224,81 @@ div#calendar div.clear { clear: both; }
     .gps-vehicle-form button { padding: 0 10px; }
     .gps-vehicle-form select { font-size: 12px; }
 }
+
+/* Two compact monthly rows: 01-15 and 16-end, no horizontal scrolling. */
+div#calendar.calendar-horizontal {
+    width: min(100%, 1040px);
+}
+div#calendar.calendar-horizontal .box-content {
+    padding: 10px;
+}
+div#calendar.calendar-horizontal .calendar-day-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    width: 100%;
+}
+div#calendar.calendar-horizontal ul.dates {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+div#calendar.calendar-horizontal ul.dates li {
+    flex: 1 1 0;
+    width: 0;
+    min-width: 0;
+    height: 76px;
+    margin: 0;
+    padding: 0;
+    background: #e4e4e4;
+    border-radius: 5px;
+    overflow: hidden;
+}
+div#calendar.calendar-horizontal ul.dates li.weekend { background: #d1d9e2; }
+div#calendar.calendar-horizontal ul.dates li.selected-day { background: #a6e6a6; }
+div#calendar.calendar-horizontal ul.dates li.today { border: 2px solid #cb3030; }
+div#calendar.calendar-horizontal ul.dates li a {
+    gap: 4px;
+    padding: 3px 0;
+    line-height: 1.2;
+}
+div#calendar.calendar-horizontal .weekday {
+    font-size: 11px;
+    color: #555;
+}
+div#calendar.calendar-horizontal .day-number {
+    font-size: 17px;
+    font-weight: 600;
+}
+div#calendar.calendar-horizontal .activity-count {
+    color: #075e24;
+    font-weight: bold;
+    font-size: 10px;
+}
+div#calendar.calendar-horizontal .activity-empty {
+    font-size: 12px;
+    color: #888;
+}
+@media (max-width: 700px) {
+    div#calendar.calendar-horizontal .box-content { padding: 5px; }
+    div#calendar.calendar-horizontal ul.dates { gap: 2px; }
+    div#calendar.calendar-horizontal ul.dates li { height: 61px; border-radius: 3px; }
+    div#calendar.calendar-horizontal ul.dates li a { gap: 2px; padding: 2px 0; }
+    div#calendar.calendar-horizontal .weekday { font-size: 9px; }
+    div#calendar.calendar-horizontal .day-number { font-size: 13px; }
+    div#calendar.calendar-horizontal .activity-count { font-size: 0; }
+    div#calendar.calendar-horizontal .activity-count::after {
+        content: "●";
+        font-size: 11px;
+    }
+}
+@media (max-width: 390px) {
+    div#calendar.calendar-horizontal .box-content { padding: 3px; }
+    div#calendar.calendar-horizontal ul.dates { gap: 1px; }
+    div#calendar.calendar-horizontal ul.dates li { height: 56px; }
+    div#calendar.calendar-horizontal .weekday { font-size: 8px; }
+    div#calendar.calendar-horizontal .day-number { font-size: 11px; }
+}

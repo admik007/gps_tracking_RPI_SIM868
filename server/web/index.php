@@ -313,96 +313,59 @@ class Calendar {
         $this->currentYear=$year;
         $this->currentMonth=$month;
         $this->daysInMonth=$this->_daysInMonth($month,$year);
-        $content='<div id="calendar">'.
-                        '<div class="box">'.
-                        $this->_createNavi().
-                        '</div>'.
-                        '<div class="box-content">'.
-                                '<ul class="label">'.$this->_createLabels().'</ul>';
-                                $content.='<div class="clear"></div>';
-                                $content.='<ul class="dates">';
-
-                                $weeksInMonth = $this->_weeksInMonth($month,$year);
-                                // Create weeks in a month
-                                for( $i=0; $i<$weeksInMonth; $i++ ){
-                                    //Create days in a week
-                                    for($j=1;$j<=7;$j++){
-                                        $content.=$this->_showDay($i*7+$j);
-                                    }
-                                }
-                                $content.='</ul>';
-                                $content.='<div class="clear"></div>';
-                        $content.='</div>';
-        $content.='</div>';
+        $content='<div id="calendar" class="calendar-horizontal">'.
+                    '<div class="box">'.$this->_createNavi().'</div>'.
+                    '<div class="box-content">'.
+                    '<div class="calendar-day-rows" aria-label="Dni vybraného mesiaca">'.
+                    '<ul class="dates dates-first" aria-label="Dni 1 až 15">';
+        for ($d = 1; $d <= min(15, $this->daysInMonth); $d++) {
+            $content .= $this->_showDay($d);
+        }
+        $content .= '</ul><ul class="dates dates-second" aria-label="Dni 16 až koniec mesiaca">';
+        for ($d = 16; $d <= $this->daysInMonth; $d++) {
+            $content .= $this->_showDay($d);
+        }
+        $content .= '</ul></div></div></div>';
         return $content;
     }
     /********************* PRIVATE **********************/
     /**
     * create the li element for ul
     */
-    public function _showDay($cellNumber){
-        $year  = null;
-        $month = null;
-        $day = null;
-        if(null==$year&&isset($_GET['year'])){
-            $year = $_GET['year'];
-        }else if(null==$year){
-            $year = date("Y",time());
-        }
-
-        if(null==$month&&isset($_GET['month'])){
-            $month = $_GET['month'];
-        }else if(null==$month){
-            $month = date("m",time());
-        }
-
-
-        if(null==$day&&isset($_GET['day'])){
-            $day = $_GET['day'];
-        }else if(null==$day){
-            $day = date("d",time());
-        }
-
-        $this->selectedDAY=$day;
-        if($this->currentDay==0){
-            $firstDayOfTheWeek = date('N',strtotime($this->currentYear.'-'.$this->currentMonth.'-01'));
-            if(intval($cellNumber) == intval($firstDayOfTheWeek)){
-                $this->currentDay=1;
-            }
-        }
-        if( ($this->currentDay!=0)&&($this->currentDay<=$this->daysInMonth) ){
-            $this->currentDate = date('Y-m-d',strtotime($this->currentYear.'-'.$this->currentMonth.'-'.($this->currentDay)));
-            $cellContent = $this->currentDay;
-	    if ($cellContent < 10) {
-	         $cellContent = '0'.$cellContent;
-	    }
-
-            $this->currentDay++;
-        }else{
-            $this->currentDate =null;
-            $cellContent=null;
-        }
-	/* Here is list of days */
-        $todayday = date('d');
-        $todayYmd = date('Ymd');
-
-
-        if ($this->currentDate === null) {
-            return '<li class="empty-day"></li>' . "\n";
-        }
+    public function _showDay($dayNumber) {
+        $date = sprintf('%04d-%02d-%02d',
+            (int)$this->currentYear,
+            (int)$this->currentMonth,
+            (int)$dayNumber
+        );
+        $weekdayNames = array('Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne');
+        $weekdayIndex = (int)date('N', strtotime($date)) - 1;
+        $weekday = $weekdayNames[$weekdayIndex];
         $classes = array();
-        if ($this->currentDate === date('Y-m-d')) $classes[] = 'today';
-        if ((int)$cellContent === (int)$this->selectedDAY) $classes[] = 'selected-day';
-
-        $devices = $this->devicesByDay[$this->currentDate] ?? array();
-        $devicesTitle = htmlspecialchars(
-            count($devices) ? implode(', ', $devices) : 'Bez GPS záznamov',
+        if ($date === date('Y-m-d')) $classes[] = 'today';
+        if ($date === sprintf('%04d-%02d-%02d', (int)$this->currentYear, (int)$this->currentMonth, (int)$this->selectedDAY)) {
+            $classes[] = 'selected-day';
+        }
+        if ($weekdayIndex >= 5) $classes[] = 'weekend';
+        $devices = $this->devicesByDay[$date] ?? array();
+        $count = count($devices);
+        $title = htmlspecialchars(
+            $count ? implode(', ', $devices) : 'Bez GPS záznamov',
             ENT_QUOTES, 'UTF-8'
         );
-        $activity = count($devices) > 0
-            ? '<span class="activity-count">'.count($devices).' voz.</span>'
-            : '';
-        return '<li class="'.implode(' ', $classes).'"><a title="'.$devicesTitle.'" href="?year='.$this->currentYear.'&amp;month='.$this->currentMonth.'&amp;day='.$cellContent.'&amp;devicerpi='.rawurlencode($this->devicerpi).'"><span>'.$cellContent.'</span>'.$activity.'</a></li>' . "\n";
+        $activity = $count
+            ? '<span class="activity-count">'.$count.' voz.</span>'
+            : '<span class="activity-empty" aria-label="Bez GPS záznamov">&ndash;</span>';
+        $url = '?year='.(int)$this->currentYear.
+            '&amp;month='.sprintf('%02d', (int)$this->currentMonth).
+            '&amp;day='.sprintf('%02d', (int)$dayNumber).
+            '&amp;devicerpi='.rawurlencode($this->devicerpi);
+
+        return '<li class="'.implode(' ', $classes).'">'.
+            '<a title="'.$title.'" href="'.$url.'">'.
+            '<span class="weekday">'.$weekday.'</span>'.
+            '<span class="day-number">'.sprintf('%02d', $dayNumber).'</span>'.
+            $activity.'</a></li>'."\n";
     }
     /** Create calendar navigation */
     public function _createNavi(){
