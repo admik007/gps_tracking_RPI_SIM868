@@ -217,19 +217,19 @@ $selected_devicerpi = ($devicerpi === '')
     ? ' >>> Vyberte si vozidlo <<< '
     : ' >>> Vybrane: ' . $selected_name . ' <<< ';
 
-echo "<table border=\\"0\\" width=\\"260\\" align=\\"center\\">
+echo "<table border=\"0\" width=\"260\" align=\"center\">
  <tr>
-  <td align=\\"center\\">
-   <form method=\\"post\\" action=\\"index.php?year=".$year."&amp;month=".$month."&amp;day=".$day."\\">
-    <select name=\\"devicerpi\\">
-     <option value=\\"\" selected disabled>".htmlspecialchars($selected_devicerpi, ENT_QUOTES, 'UTF-8')."</option>
+  <td align=\"center\">
+   <form method=\"post\" action=\"index.php?year=".$year."&amp;month=".$month."&amp;day=".$day."\">
+    <select name=\"devicerpi\">
+     <option value=\"\" selected disabled>".htmlspecialchars($selected_devicerpi, ENT_QUOTES, 'UTF-8')."</option>
 ";
 
 foreach ($gps_devices as $device_id => $vehicle_name) {
     $option_id = htmlspecialchars($device_id, ENT_QUOTES, 'UTF-8');
     $option_label = htmlspecialchars($vehicle_name, ENT_QUOTES, 'UTF-8');
     $selected = ($device_id === $devicerpi) ? ' selected' : '';
-    echo "     <option value=\\"".$option_id."\\"".$selected.">".$option_label." - ".$option_id."</option>\n";
+    echo "     <option value=\"".$option_id."\"".$selected.">".$option_label." - ".$option_id."</option>\n";
 }
 
 echo "    </select>
