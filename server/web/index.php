@@ -86,9 +86,6 @@ if (empty($_GET["bat"])) $bat="";
 if (isset($_GET["bat"])) $bat=$_GET["bat"];
 
 
-if (empty($_GET["device"])) $device="";
-if (isset($_GET["device"])) $device=$_GET["device"];
-
 if (empty($_GET["devicerpi"])) $devicerpi="";
 if (isset($_GET["devicerpi"])) $devicerpi=$_GET["devicerpi"];
 
@@ -203,41 +200,36 @@ $tracking_list_db = mysqli_query($spojenie,$sql);
 
 $tracking_list_db_row = mysqli_num_rows ($tracking_list_db);
 
-$tracking_list_db_devicesrpi = mysqli_query($spojenie,"SELECT DISTINCT devicerpi FROM $MySQL_table WHERE devicerpi <> '' AND time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC') AND time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC') ORDER BY devicerpi ASC");
-$tracking_list_db_devicesrpi_row = mysqli_num_rows ($tracking_list_db_devicesrpi);
-
-
-if ( $devicerpi == '' ) {
- $selected_devicerpi=" >>> Vyberte si zariadenie <<< ";
-} else {
- $selected_devicerpi = " >>> Vybrane: ".$devicerpi." <<< ";
+// Device metadata lives in a small lookup table, independent of GPS records.
+// Include every registered vehicle even if it has no points for this date.
+$gps_devices = array();
+$devices_result = mysqli_query($spojenie,
+    "SELECT devicerpi, name FROM gps_devices ORDER BY name, devicerpi");
+if (!$devices_result) {
+    die('Unable to load GPS devices. Check gps_devices table.');
+}
+while ($device_row = mysqli_fetch_assoc($devices_result)) {
+    $gps_devices[$device_row['devicerpi']] = $device_row['name'];
 }
 
-echo "<table border=\"0\" width=\"260\" align=\"center\">
+$selected_name = $gps_devices[$devicerpi] ?? $devicerpi;
+$selected_devicerpi = ($devicerpi === '')
+    ? ' >>> Vyberte si vozidlo <<< '
+    : ' >>> Vybrane: ' . $selected_name . ' <<< ';
+
+echo "<table border=\\"0\\" width=\\"260\\" align=\\"center\\">
  <tr>
-  <td align=\"center\">
-   <form method=\"post\" action=\"index.php?year=".$year."&amp;month=".$month."&amp;day=".$day."&amp;devicerpi=".$devicerpi."\">
-    <select name=\"devicerpi\">
-     <option value=\"".$devicerpi."\" selected> ".$selected_devicerpi."</option>
+  <td align=\\"center\\">
+   <form method=\\"post\\" action=\\"index.php?year=".$year."&amp;month=".$month."&amp;day=".$day."\\">
+    <select name=\\"devicerpi\\">
+     <option value=\\"\" selected disabled>".htmlspecialchars($selected_devicerpi, ENT_QUOTES, 'UTF-8')."</option>
 ";
 
- for ($i = 1; $i <= $tracking_list_db_devicesrpi_row; $i++) {
-  if ( $i == 1 ) $i = '01';
-  if ( $i == 2 ) $i = '02';
-  if ( $i == 3 ) $i = '03';
-  if ( $i == 4 ) $i = '04';
-  if ( $i == 5 ) $i = '05';
-  if ( $i == 6 ) $i = '06';
-  if ( $i == 7 ) $i = '07';
-  if ( $i == 8 ) $i = '08';
-  if ( $i == 9 ) $i = '09';
-  $devicerpientries = mysqli_fetch_array($tracking_list_db_devicesrpi, MYSQLI_ASSOC);
-  $devicerpiinfo=$devicerpientries["devicerpi"];
-  $devrpiinfo = $devicerpiinfo;
-  if ($devicerpiinfo === 'e661385283997828') $devrpiinfo = 'BMW_E46';
-  if ($devicerpiinfo === 'bd6718189a7ba68a') $devrpiinfo = 'BMW_E90';
-  echo "     <option value=\"".$devicerpiinfo."\"> ".$i." => ".$devrpiinfo." - ".$devicerpiinfo." </option>
-"; 
+foreach ($gps_devices as $device_id => $vehicle_name) {
+    $option_id = htmlspecialchars($device_id, ENT_QUOTES, 'UTF-8');
+    $option_label = htmlspecialchars($vehicle_name, ENT_QUOTES, 'UTF-8');
+    $selected = ($device_id === $devicerpi) ? ' selected' : '';
+    echo "     <option value=\\"".$option_id."\\"".$selected.">".$option_label." - ".$option_id."</option>\n";
 }
 
 echo "    </select>
@@ -252,7 +244,7 @@ echo "    </select>
  } else {
   echo "<br>";
  }
-echo "   <a href=\"http://".$_SERVER["SERVER_NAME"]."/osm.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Zobraz dnesnu mapu</b> </a><br>
+echo "   <a href=\"http://".$_SERVER["SERVER_NAME"]."/osm.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Zobraz mapu</b> </a><br>
 </table>\n\n";
 
 ############################################
@@ -466,7 +458,7 @@ echo $calendar->show();
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Satelity</b></font></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Čas</b></font></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Miesto</b></font></td>
-  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>ŠPZ</b></font></td>
+  <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Vozidlo</b></font></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>GPS</b></font></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Network</b></font></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Signal</b></font></td>
@@ -545,17 +537,8 @@ echo $calendar->show();
   $lat_last=$entries['lat'];
   $lon_last=$entries['lon'];
 
-  $SPZ=$devicerpi;
-  switch ($devicerpi) {
-   case "e661385283997828":
-    $SPZ="BMW_E46";
-    break;
-
-   case "bd6718189a7ba68a":
-    $SPZ='BMW_E90';
-    break;
-  }
-
+  // Resolve the vehicle name once from the device lookup table.
+  $SPZ = htmlspecialchars($gps_devices[$entries['devicerpi']] ?? $entries['devicerpi'], ENT_QUOTES, 'UTF-8');
 
   $network=$entries['creg'];
   switch ($network) {
