@@ -118,7 +118,7 @@ def canonical_utc_time(value):
         return None
     raw = value.strip()
     compact = re.fullmatch(
-        r"(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})(\\.\d+)?Z?",
+        r"(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})(\.\d+)?Z?",
         raw
     )
     if compact:
