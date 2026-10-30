@@ -138,12 +138,11 @@ if (isset($_GET["LAC"])) $lac=$_GET["LAC"];
 
 
 
-// Current and previous calendar month remain in the live table.
-// Compare both month and year, otherwise historical months may use live data.
+// Only the current calendar month is read from the live table.
+// Previous months are stored in the archive.
 $requestedMonth = sprintf('%04d-%02d', (int)$year, (int)$month);
 $currentMonth = date('Y-m');
-$previousMonth = date('Y-m', strtotime('first day of last month'));
-if ($requestedMonth === $currentMonth || $requestedMonth === $previousMonth) {
+if ($requestedMonth === $currentMonth) {
  $MySQL_table=$MySQL_table1;
 }
 else {
