@@ -41,6 +41,17 @@ date_default_timezone_set('Europe/Bratislava');
 <?php
 }
 
+// Read-only profiling: enabled on the test page with ?perf=1 (& other parameters).
+$gps_perf_enabled = isset($_GET['perf']) && $_GET['perf'] === '1';
+$gps_perf = array();
+$gps_perf_request_start = microtime(true);
+$gps_perf_address_queries = 0;
+$gps_perf_address_cache_hits = 0;
+$gps_perf_address_misses = 0;
+$gps_perf_address_log_writes = 0;
+$gps_perf_address_seconds = 0.0;
+$gps_perf_calendar_rows = 0;
+
 $starttime = explode(' ', microtime());
 $starttime = $starttime[1] + $starttime[0];
 
@@ -103,7 +114,12 @@ if (!checkdate($month, $day, $year)) {
 }
 $devicerpi_sql = mysqli_real_escape_string($spojenie, $devicerpi);
 $dayStart = sprintf('%04d-%02d-%02d 00:00:00', $year, $month, $day);
-$dayStart_sql = mysqli_real_escape_string($spojenie, $dayStart);
+// GPS time is stored as UTC VARCHAR: compare to UTC strings to use index.
+$day_local_start = new DateTimeImmutable($dayStart, new DateTimeZone('Europe/Bratislava'));
+$utc_timezone = new DateTimeZone('UTC');
+// Compute the next LOCAL midnight before converting to UTC (DST-safe).
+$day_utc_start_sql = mysqli_real_escape_string($spojenie, $day_local_start->setTimezone($utc_timezone)->format('Y-m-d H:i:s'));
+$day_utc_end_sql = mysqli_real_escape_string($spojenie, $day_local_start->modify('+1 day')->setTimezone($utc_timezone)->format('Y-m-d H:i:s'));
 
 
 if (empty($_GET["direction"])) $direction="0.0";
@@ -150,8 +166,10 @@ else {
 }
 
 
-$count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi_sql' AND time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC') AND time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC') ";
+$count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi_sql' AND time >= '$day_utc_start_sql' AND time < '$day_utc_end_sql' ";
+$gps_perf_t0 = microtime(true);
 $count_result = mysqli_query($spojenie,$count_sql);
+$gps_perf['count_query'] = microtime(true) - $gps_perf_t0;
 $count_row = mysqli_fetch_assoc($count_result);
 $tracking_list_db_row_total = $count_row['total'];
 
@@ -190,11 +208,13 @@ $sql = "SELECT g.*, COALESCE(b.address, '- - -') AS bts_address
          AND b.mnc = g.mnc
          AND b.cellid = g.cellid
         WHERE g.devicerpi='$devicerpi_sql'
-          AND g.time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC')
-          AND g.time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC')
+          AND g.time >= '$day_utc_start_sql'
+          AND g.time < '$day_utc_end_sql'
           AND g.id MOD $step = 0
         ORDER BY g.time DESC";
+$gps_perf_t0 = microtime(true);
 $tracking_list_db = mysqli_query($spojenie,$sql);
+$gps_perf['gps_query'] = microtime(true) - $gps_perf_t0;
 
 
 $tracking_list_db_row = mysqli_num_rows ($tracking_list_db);
@@ -202,11 +222,13 @@ $tracking_list_db_row = mysqli_num_rows ($tracking_list_db);
 // Device metadata lives in a small lookup table, independent of GPS records.
 // Include every registered vehicle even if it has no points for this date.
 $gps_devices = array();
+$gps_perf_t0 = microtime(true);
 $devices_result = mysqli_query($spojenie,
     "SELECT devicerpi, name FROM gps_devices ORDER BY name, devicerpi");
 if (!$devices_result) {
     die('Unable to load GPS devices. Check gps_devices table.');
 }
+$gps_perf['devices_query'] = microtime(true) - $gps_perf_t0;
 while ($device_row = mysqli_fetch_assoc($devices_result)) {
     $gps_devices[$device_row['devicerpi']] = $device_row['name'];
 }
@@ -252,9 +274,12 @@ if (!empty($gps_devices)) {
           AND time >= '" . mysqli_real_escape_string($spojenie, $utc_month_start) . "'
           AND time < '" . mysqli_real_escape_string($spojenie, $utc_month_end) . "'
         GROUP BY devicerpi, local_day";
+    $gps_perf_t0 = microtime(true);
     $calendar_result = mysqli_query($spojenie, $calendar_sql);
+    $gps_perf['calendar_query'] = microtime(true) - $gps_perf_t0;
     if ($calendar_result) {
         while ($calendar_row = mysqli_fetch_assoc($calendar_result)) {
+            $gps_perf_calendar_rows++;
             $calendar_day = $calendar_row['local_day'];
             if ($calendar_day !== null) {
                 $calendar_devices_by_day[$calendar_day][] = $gps_devices[$calendar_row['devicerpi']];
@@ -426,7 +451,9 @@ class Calendar {
 $calendar = new Calendar();
 $calendar->devicerpi = $devicerpi;
 $calendar->devicesByDay = $calendar_devices_by_day;
+$gps_perf_t0 = microtime(true);
 echo $calendar->show();
+$gps_perf['calendar_html'] = microtime(true) - $gps_perf_t0;
 
 // Keep map navigation below the selected calendar date.
 $map_parameters = http_build_query(array(
@@ -484,6 +511,7 @@ echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="
  $WEB_FOOTER="</table></div>\n\n";
 
  $address_cache = array();
+ $gps_perf_rows_t0 = microtime(true);
  for ($i = 1; $i <= $tracking_list_db_row; $i++) {
   $entries = mysqli_fetch_array ($tracking_list_db, MYSQLI_ASSOC);
 
@@ -503,16 +531,21 @@ echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="
   $GET_LON=substr($entries['lon'],0,7);
   $key=$GET_LAT.'_'.$GET_LON;
   if (isset($address_cache[$key])) {
+   $gps_perf_address_cache_hits++;
    $miesto=$address_cache[$key];
   } else {
+   $gps_perf_address_misses++;
+   $gps_perf_addr_t0 = microtime(true);
    $sql="SELECT miesto FROM $MySQL_table3 WHERE lat LIKE '$GET_LAT%' AND lon LIKE '$GET_LON%' AND status='OK' LIMIT 1";
    $res=mysqli_query($spojenie,$sql);
+   $gps_perf_address_queries++;
    if(mysqli_num_rows($res)==1){
     $row=mysqli_fetch_assoc($res);
     $miesto=$row['miesto'];
    } else {
     $miesto="- - -";
     $url="https://api.geoapify.com/v1/geocode/reverse?type=street&format=xml&lat=".$entries['lat']."&lon=".$entries['lon']."&apiKey=".$GAPIKEY;
+    $gps_perf_address_log_writes++;
     file_put_contents(
      "get_url.txt",
      $url."\n",
@@ -520,6 +553,7 @@ echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="
     );
    }
    $address_cache[$key]=$miesto;
+   $gps_perf_address_seconds += microtime(true) - $gps_perf_addr_t0;
   }
 ############################################
 ############## GPS TO ADDRESS ##############
@@ -596,6 +630,7 @@ if ($entries['lat'] == '0.000000' ){
 '; 
 
  }
+ $gps_perf['gps_rows_render_and_addresses'] = microtime(true) - $gps_perf_rows_t0;
  echo $WEB_HEADER.$WEB_MIDDLE.$WEB_FOOTER;
  echo '<p align="center">
 <a href="http://validator.w3.org/check?uri=referer" target="_blank">
@@ -606,6 +641,38 @@ if ($entries['lat'] == '0.000000' ){
  $mtime = explode(' ', microtime());
  $totaltime = $mtime[0] + $mtime[1] - $starttime;
  printf ('<font color="000DDA"> Stránka vygenerovaná za %.3f sekundy. </font>', $totaltime);
+
+ // Only show profiling metrics when explicitly requested on the test deployment.
+ // Measurements never change SQL or data selection.
+ if ($gps_perf_enabled) {
+     $gps_perf['address_lookups'] = $gps_perf_address_seconds;
+     $gps_perf['gps_row_processing_excluding_lookups'] =
+         max(0.0, ($gps_perf['gps_rows_render_and_addresses'] ?? 0) - $gps_perf_address_seconds);
+     $gps_perf['total_request'] = microtime(true) - $gps_perf_request_start;
+
+     echo '<section style="max-width:750px;margin:18px auto;padding:14px;background:#fff;border:1px solid #999;font:13px Arial,sans-serif;text-align:left">';
+     echo '<h3 style="margin-top:0">GPS – meranie výkonu (test)</h3>';
+     echo '<table style="border-collapse:collapse;width:100%"><tr><th align="left">Operácia</th><th align="right">Čas (ms)</th></tr>';
+     foreach ($gps_perf as $stage => $seconds) {
+         echo '<tr><td style="border-top:1px solid #ddd;padding:5px">'.
+             htmlspecialchars($stage, ENT_QUOTES, 'UTF-8').
+             '</td><td align="right" style="border-top:1px solid #ddd;padding:5px">'.
+             number_format($seconds * 1000, 2, '.', ' ').
+             '</td></tr>';
+     }
+     echo '</table>';
+     echo '<p style="margin-bottom:0">Tabuľka: '.
+         htmlspecialchars($MySQL_table, ENT_QUOTES, 'UTF-8').
+         ' | Všetky body za deň: '.(int)$tracking_list_db_row_total.
+         ' | Načítané po vzorkovaní: '.(int)$tracking_list_db_row.
+         ' | Krok: '.(int)$step.
+         ' | Kalendár (skupiny): '.(int)$gps_perf_calendar_rows.
+         ' | Adresy: '.(int)$gps_perf_address_queries.' SQL, '.
+         (int)$gps_perf_address_cache_hits.' cache hits, '.
+         (int)$gps_perf_address_misses.' misses, '.
+         (int)$gps_perf_address_log_writes.' zápisov do logu.</p>';
+     echo '</section>';
+ }
 
 mysqli_close($spojenie);
 ?>
