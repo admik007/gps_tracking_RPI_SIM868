@@ -203,7 +203,7 @@ if ($tracking_list_db_row_total > 25000) {
 
 $sql = "SELECT g.*, COALESCE(b.address, '- - -') AS bts_address
         FROM $MySQL_table g
-        LEFT JOIN $MySQL_table7 b
+        LEFT JOIN bts_lookup b
           ON b.mcc = g.mcc
          AND b.mnc = g.mnc
          AND b.cellid = g.cellid
