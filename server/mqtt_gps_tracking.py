@@ -78,6 +78,73 @@ def safe_bool(value, default=True):
 
 
 # =========================
+# BTS AUTO-REGISTRATION
+# =========================
+
+def register_new_bts(data, device_id, gps_time, gps_valid, lat, lon, alt,
+                     mcc, mnc, cellid, lac, bsic):
+    """Register only NEW GSM cells; leave existing surveyed BTS untouched.
+
+    GPS coordinates are a place of reception, never a proven tower location.
+    Invalid network identity is ignored. A BTS insert failure must not discard
+    an otherwise valid GPS measurement; the caller surrounds it with a savepoint.
+    """
+    mcc = mcc.strip()
+    mnc = mnc.strip()
+    if (not re.fullmatch(r"[0-9]{3}", mcc)
+            or not re.fullmatch(r"[0-9]{2,3}", mnc)
+            or not 0 < cellid <= 9223372036854775807):
+        return "skipped"
+
+    valid_position = (
+        gps_valid == 1
+        and -90 <= lat <= 90 and -180 <= lon <= 180
+        and (lat != 0 or lon != 0)
+    )
+    location_type = "observation" if valid_position else "unknown"
+    position_lat = str(lat) if valid_position else ""
+    position_lon = str(lon) if valid_position else ""
+    position_alt = str(alt) if valid_position else ""
+
+    # GPS measurement time (UTC) is preferred over receipt time for historical
+    # replays. DATETIME columns are UTC by convention for this application.
+    canonical_time = canonical_utc_time(gps_time)
+    observed_at = (
+        datetime.fromisoformat(canonical_time).replace(tzinfo=None)
+        if canonical_time else datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    original_time = gps_time if isinstance(gps_time, str) else ""
+
+    cursor.execute(
+        """
+        INSERT INTO bts_tracking (
+            lat, lon, alt, time, device,
+            mcc, mnc, bsic, cellid, lac, address,
+            location_type, technology, first_seen, last_seen,
+            observations, source
+        ) VALUES (
+            %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s,
+            %s, 'GSM', %s, %s,
+            1, 'gps_tracker'
+        )
+        ON DUPLICATE KEY UPDATE id = id
+        """,
+        (
+            position_lat, position_lon, position_alt, original_time[:26],
+            device_id, mcc, mnc, str(bsic), cellid, str(lac),
+            "no info", location_type, observed_at, observed_at
+        )
+    )
+    if cursor.rowcount == 1:
+        print("BTS NEW: {}/{}/{} ({})".format(
+            mcc, mnc, cellid, location_type
+        ))
+        return "new"
+    return "existing"
+
+
+# =========================
 # MYSQL INSERT
 # =========================
 
@@ -305,6 +372,23 @@ def insert_record(data, device_id):
     # The registry insert and GPS INSERT are in the SAME transaction:
     # any rollback removes both, so a failed GPS insert cannot reserve a key.
     cursor.execute(sql, values)
+
+    # BTS registration is best-effort. Its own savepoint ensures that a missing
+    # table, privilege error or unexpected BTS value never rolls back GPS data.
+    cursor.execute("SAVEPOINT bts_registration")
+    try:
+        register_new_bts(
+            data, device_id, gps_time, gps_valid, lat, lon, alt,
+            mcc, mnc, cellid, lac, bsic
+        )
+    except mysql.connector.Error as e:
+        cursor.execute("ROLLBACK TO SAVEPOINT bts_registration")
+        print("BTS REGISTER ERROR (GPS preserved):", e)
+    except Exception as e:
+        cursor.execute("ROLLBACK TO SAVEPOINT bts_registration")
+        print("BTS REGISTER ERROR (GPS preserved):", e)
+    finally:
+        cursor.execute("RELEASE SAVEPOINT bts_registration")
     return True
 
 
