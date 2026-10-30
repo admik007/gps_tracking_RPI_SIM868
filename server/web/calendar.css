@@ -140,13 +140,6 @@ div#calendar div.clear { clear: both; }
 .gps-toolbar *, .gps-map-action *, .gps-data-scroll * {
     box-sizing: border-box;
 }
-.gps-toolbar-title {
-    color: #444;
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 0.08em;
-    margin-bottom: 10px;
-}
 .gps-vehicle-form {
     display: flex;
     align-items: stretch;
