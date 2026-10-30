@@ -480,7 +480,7 @@ echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="
 ############################################
 
  $WEB_HEADER="
-<table align=\"center\" border=\"1\" cellpadding=\"0\" cellspacing=\"0\">
+<div class=\"gps-data-scroll\"><table class=\"gps-data-table\" align=\"center\" border=\"1\" cellpadding=\"0\" cellspacing=\"0\">
  <tr>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>ID</b></font></td>
   <td bgcolor=\"#000000\" align=\"center\"><font color=\"00FAAA\"><b>Súradnice</b></font></td>
@@ -519,7 +519,7 @@ echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="
 
 ";
  $WEB_MIDDLE="";
- $WEB_FOOTER="</table>\n\n";
+ $WEB_FOOTER="</table></div>\n\n";
 
  $address_cache = array();
  for ($i = 1; $i <= $tracking_list_db_row; $i++) {
