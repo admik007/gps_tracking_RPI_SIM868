@@ -114,7 +114,12 @@ if (!checkdate($month, $day, $year)) {
 }
 $devicerpi_sql = mysqli_real_escape_string($spojenie, $devicerpi);
 $dayStart = sprintf('%04d-%02d-%02d 00:00:00', $year, $month, $day);
-$dayStart_sql = mysqli_real_escape_string($spojenie, $dayStart);
+// GPS time is stored as UTC VARCHAR: compare to UTC strings to use index.
+$day_local_start = new DateTimeImmutable($dayStart, new DateTimeZone('Europe/Bratislava'));
+$utc_timezone = new DateTimeZone('UTC');
+// Compute the next LOCAL midnight before converting to UTC (DST-safe).
+$day_utc_start_sql = mysqli_real_escape_string($spojenie, $day_local_start->setTimezone($utc_timezone)->format('Y-m-d H:i:s'));
+$day_utc_end_sql = mysqli_real_escape_string($spojenie, $day_local_start->modify('+1 day')->setTimezone($utc_timezone)->format('Y-m-d H:i:s'));
 
 
 if (empty($_GET["direction"])) $direction="0.0";
@@ -161,7 +166,7 @@ else {
 }
 
 
-$count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi_sql' AND time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC') AND time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC') ";
+$count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi_sql' AND time >= '$day_utc_start_sql' AND time < '$day_utc_end_sql' ";
 $gps_perf_t0 = microtime(true);
 $count_result = mysqli_query($spojenie,$count_sql);
 $gps_perf['count_query'] = microtime(true) - $gps_perf_t0;
@@ -203,8 +208,8 @@ $sql = "SELECT g.*, COALESCE(b.address, '- - -') AS bts_address
          AND b.mnc = g.mnc
          AND b.cellid = g.cellid
         WHERE g.devicerpi='$devicerpi_sql'
-          AND g.time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC')
-          AND g.time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC')
+          AND g.time >= '$day_utc_start_sql'
+          AND g.time < '$day_utc_end_sql'
           AND g.id MOD $step = 0
         ORDER BY g.time DESC";
 $gps_perf_t0 = microtime(true);
