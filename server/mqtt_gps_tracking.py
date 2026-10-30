@@ -118,7 +118,7 @@ def canonical_utc_time(value):
         return None
     raw = value.strip()
     compact = re.fullmatch(
-        r"(\\d{4}-\\d{2}-\\d{2})T(\\d{2})(\\d{2})(\\d{2})(\\.\\d+)?Z?",
+        r"(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})(\\.\d+)?Z?",
         raw
     )
     if compact:
@@ -142,7 +142,7 @@ def measurement_key(device_id, gps_time, values):
     # All payload-derived columns, excluding id and server receive timestamp.
     # Do not collapse differing GPS/GSM diagnostics into a single record.
     stable_fields = (
-        values[0:6] + (values[7], values[8], values[9]) +
+        values[0:6] + values[7:9] +
         values[15:]
     )
     payload = json.dumps(
