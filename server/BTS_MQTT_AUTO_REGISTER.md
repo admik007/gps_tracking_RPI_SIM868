@@ -27,8 +27,12 @@ The user's migration has already swapped `bts_tracking_new` into
 - Otherwise use empty coordinates and `location_type=unknown`.
 - `first_seen` and `last_seen` use the GPS measurement timestamp in UTC
   if parseable, otherwise UTC receipt time.
-- Existing cell (`technology,mcc,mnc,cellid` matches) is untouched:
-  no overwriting hand-surveyed tower coordinates or known addresses.
+- Existing cell with `location_type=unknown` and a newly received valid GPS
+  fix is updated **once** to `observation`; only `lat`, `lon`, `alt`, and
+  `location_type` change. The reported coordinates are the reception
+  position, not the physical BTS location. Logs `BTS LOCATED: ...`.
+- Existing `observation` and `tower` records are untouched, including
+  their addresses and coordinates. A later valid fix does not move the point.
 - Retransmissions previously registered in `gps_received_keys` do not
   attempt a BTS insert. An older GPS row received before this feature was
   introduced can still register a new BTS if resent as a newly stored row.
@@ -63,7 +67,10 @@ The user's migration has already swapped `bts_tracking_new` into
 6. Verify original GPS logs still say
    `MYSQL: stored=1, duplicate=0, errors=0, received=1` on new point.
    New BTS logs only `BTS NEW: ...` when inserted; never on duplicate.
-7. Confirm known tower address/coordinates unchanged by repeated observations.
+7. Register a new cell while GPS is invalid: it should be `unknown`.
+   On the next new valid GPS measurement for that cell, expect `BTS LOCATED`
+   and `observation` coordinates. Additional fixes must not move the position.
+8. Confirm known tower address/coordinates unchanged by repeated observations.
 8. Only after acceptance merge PR and restart
    `mqtt_gps_mysql.service` (existing systemd service name).
 
