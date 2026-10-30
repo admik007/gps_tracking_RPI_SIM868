@@ -212,39 +212,26 @@ while ($device_row = mysqli_fetch_assoc($devices_result)) {
 }
 
 $selected_name = $gps_devices[$devicerpi] ?? $devicerpi;
-$selected_devicerpi = ($devicerpi === '')
-    ? ' >>> Vyberte si vozidlo <<< '
-    : ' >>> Vybrane: ' . $selected_name . ' <<< ';
+$selected_devicerpi = ($devicerpi === '') ? 'Vyber vozidlo' : $selected_name;
 
-echo "<table border=\"0\" width=\"260\" align=\"center\">
- <tr>
-  <td align=\"center\">
-   <form method=\"post\" action=\"index.php?year=".$year."&amp;month=".$month."&amp;day=".$day."\">
-    <select name=\"devicerpi\">
-     <option value=\"\" selected disabled>".htmlspecialchars($selected_devicerpi, ENT_QUOTES, 'UTF-8')."</option>
-";
+echo '<div class="gps-toolbar">
+    <div class="gps-toolbar-title">GPS TRACKING · HISTÓRIA VOZIDIEL</div>
+    <form class="gps-vehicle-form" method="post" action="index.php?year='.(int)$year.'&amp;month='.(int)$month.'&amp;day='.(int)$day.'">
+        <label for="gps-vehicle-select" class="gps-vehicle-label">Vozidlo</label>
+        <select id="gps-vehicle-select" name="devicerpi" required>
+            <option value="" disabled'.($devicerpi === '' ? ' selected' : '').'>Vyber vozidlo</option>';
 
 foreach ($gps_devices as $device_id => $vehicle_name) {
     $option_id = htmlspecialchars($device_id, ENT_QUOTES, 'UTF-8');
     $option_label = htmlspecialchars($vehicle_name, ENT_QUOTES, 'UTF-8');
     $selected = ($device_id === $devicerpi) ? ' selected' : '';
-    echo "     <option value=\"".$option_id."\"".$selected.">".$option_label." - ".$option_id."</option>\n";
+    echo '<option value="'.$option_id.'"'.$selected.'>'.$option_label.' - '.$option_id.'</option>';
 }
 
-echo "    </select>
-    <input type=\"submit\" value=\"Potvrdit\">
-   </form>
-  </td>
- </tr>
- <tr>
-  <td align=\"center\">";
- if ($tracking_list_db_row != "0") {
-  echo $tracking_list_db_row." / ".$tracking_list_db_row_total."<br>";
- } else {
-  echo "<br>";
- }
-echo "   <a href=\"http://".$_SERVER["SERVER_NAME"]."/osm.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Zobraz mapu</b> </a><br>
-</table>\n\n";
+echo '  </select>
+        <button type="submit">Potvrdiť</button>
+    </form>
+</div>';
 
 // Build one month-wide calendar summary using the existing device/time index.
 // Times in GPS tables are UTC strings; calendar days are Europe/Bratislava local days.
@@ -478,6 +465,16 @@ $calendar = new Calendar();
 $calendar->devicerpi = $devicerpi;
 $calendar->devicesByDay = $calendar_devices_by_day;
 echo $calendar->show();
+
+// Keep map navigation below the selected calendar date.
+$map_parameters = http_build_query(array(
+    'year' => $year,
+    'month' => $month,
+    'day' => $day,
+    'devicerpi' => $devicerpi,
+), '', '&amp;');
+echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="_blank" rel="noopener noreferrer">Zobraziť trasu na mape</a></div>';
+
 ############################################
 ################# KALENDAR #################
 ############################################
