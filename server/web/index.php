@@ -95,6 +95,19 @@ if (isset($_GET["devicerpi"])) $devicerpi=$_GET["devicerpi"];
 if (empty($_POST["devicerpi"])) $_POST["devicerpi"]=$devicerpi;
 if (isset($_POST["devicerpi"])) $devicerpi=$_POST["devicerpi"];
 
+// Normalize date parameters and escape the selected device for SQL queries.
+$year = (int)$year;
+$month = (int)$month;
+$day = (int)$day;
+if (!checkdate($month, $day, $year)) {
+    $year = (int)date('Y');
+    $month = (int)date('m');
+    $day = (int)date('d');
+}
+$devicerpi_sql = mysqli_real_escape_string($spojenie, $devicerpi);
+$dayStart = sprintf('%04d-%02d-%02d 00:00:00', $year, $month, $day);
+$dayStart_sql = mysqli_real_escape_string($spojenie, $dayStart);
+
 
 if (empty($_GET["direction"])) $direction="0.0";
 if (isset($_GET["direction"])) $direction=$_GET["direction"];
@@ -128,10 +141,12 @@ if (isset($_GET["LAC"])) $lac=$_GET["LAC"];
 
 
 
-$REQUESTED=$month;
-$CURRENT=Date("m");
-$CURRENTLAST=date("m", strtotime( date( "Y-m-d", strtotime( date("Y-m-d") ) ) . "-0 month" ) );
-if (($CURRENT == $REQUESTED) || ($CURRENTLAST == $REQUESTED)) {
+// Current and previous calendar month remain in the live table.
+// Compare both month and year, otherwise historical months may use live data.
+$requestedMonth = sprintf('%04d-%02d', (int)$year, (int)$month);
+$currentMonth = date('Y-m');
+$previousMonth = date('Y-m', strtotime('first day of last month'));
+if ($requestedMonth === $currentMonth || $requestedMonth === $previousMonth) {
  $MySQL_table=$MySQL_table1;
 }
 else {
@@ -139,7 +154,7 @@ else {
 }
 
 
-$count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi' AND time >= CONVERT_TZ('$year-$month-$day 00:00:00', 'Europe/Bratislava', 'UTC') AND time < CONVERT_TZ('$year-$month-$day 00:00:00' + INTERVAL 1 DAY, 'Europe/Bratislava', 'UTC') ";
+$count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi_sql' AND time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC') AND time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC') ";
 $count_result = mysqli_query($spojenie,$count_sql);
 $count_row = mysqli_fetch_assoc($count_result);
 $tracking_list_db_row_total = $count_row['total'];
@@ -178,9 +193,9 @@ $sql = "SELECT g.*, COALESCE(b.address, '- - -') AS bts_address
           ON b.mcc = g.mcc
          AND b.mnc = g.mnc
          AND b.cellid = g.cellid
-        WHERE g.devicerpi='$devicerpi'
-          AND g.time >= CONVERT_TZ('$year-$month-$day 00:00:00', 'Europe/Bratislava', 'UTC')
-          AND g.time < CONVERT_TZ('$year-$month-$day 00:00:00' + INTERVAL 1 DAY, 'Europe/Bratislava', 'UTC')
+        WHERE g.devicerpi='$devicerpi_sql'
+          AND g.time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC')
+          AND g.time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC')
           AND g.id MOD $step = 0
         ORDER BY g.time DESC";
 $tracking_list_db = mysqli_query($spojenie,$sql);
@@ -188,13 +203,8 @@ $tracking_list_db = mysqli_query($spojenie,$sql);
 
 $tracking_list_db_row = mysqli_num_rows ($tracking_list_db);
 
-$tracking_list_db_devicesrpi = mysqli_query($spojenie,"SELECT DISTINCT(devicerpi) FROM $MySQL_table WHERE devicerpi != '' AND time like '$year-$month-$day%' order by device asc");
+$tracking_list_db_devicesrpi = mysqli_query($spojenie,"SELECT DISTINCT devicerpi FROM $MySQL_table WHERE devicerpi <> '' AND time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC') AND time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC') ORDER BY devicerpi ASC");
 $tracking_list_db_devicesrpi_row = mysqli_num_rows ($tracking_list_db_devicesrpi);
-
-$sql = "SELECT COUNT(DISTINCT devicerpi) AS total FROM $MySQL_table WHERE devicerpi <> '' ";
-$result = mysqli_query($spojenie,$sql);
-$row = mysqli_fetch_assoc($result);
-$tracking_list_db_devicesrpi_total_row = $row['total'];
 
 
 if ( $devicerpi == '' ) {
@@ -223,9 +233,9 @@ echo "<table border=\"0\" width=\"260\" align=\"center\">
   if ( $i == 9 ) $i = '09';
   $devicerpientries = mysqli_fetch_array($tracking_list_db_devicesrpi, MYSQLI_ASSOC);
   $devicerpiinfo=$devicerpientries["devicerpi"];
-  $devicerpientries_details = mysqli_query($spojenie,"SELECT device FROM $MySQL_table WHERE devicerpi='$devicerpiinfo' LIMIT 1");
-  $devrpientries = mysqli_fetch_array ($devicerpientries_details, MYSQLI_ASSOC);
-  $devrpiinfo = $devrpientries["device"];
+  $devrpiinfo = $devicerpiinfo;
+  if ($devicerpiinfo === 'e661385283997828') $devrpiinfo = 'BMW_E46';
+  if ($devicerpiinfo === 'bd6718189a7ba68a') $devrpiinfo = 'BMW_E90';
   echo "     <option value=\"".$devicerpiinfo."\"> ".$i." => ".$devrpiinfo." - ".$devicerpiinfo." </option>
 "; 
 }
@@ -492,7 +502,7 @@ echo $calendar->show();
   $entries = mysqli_fetch_array ($tracking_list_db, MYSQLI_ASSOC);
 
   $direction='---';
-  if (($entries['direction'] >   '0') and ($entries['direction'] <  '45' )) { $drection='S';}
+  if (($entries['direction'] >   '0') and ($entries['direction'] <  '45' )) { $direction='S';}
   if (($entries['direction'] >  '46') and ($entries['direction'] < '125' )) { $direction='V';}
   if (($entries['direction'] > '126') and ($entries['direction'] < '225' )) { $direction='J';}
   if (($entries['direction'] > '226') and ($entries['direction'] < '275' )) { $direction='Z';}
@@ -535,7 +545,7 @@ echo $calendar->show();
   $lat_last=$entries['lat'];
   $lon_last=$entries['lon'];
 
-  $SPZ=$entries['device'];
+  $SPZ=$devicerpi;
   switch ($devicerpi) {
    case "e661385283997828":
     $SPZ="BMW_E46";
@@ -577,7 +587,7 @@ echo $calendar->show();
 
 
   if (($entries['csq'] > '0')  and ($entries['csq'] <  '10' )) { $csq='Veľmi slabý signál';}
-  if (($entries['csq'] > '90') and ($entries['csq'] <  '15' )) { $csq='Slabší signál';}
+  if (($entries['csq'] > '9') and ($entries['csq'] <  '15' )) { $csq='Slabší signál';}
   if (($entries['csq'] > '14') and ($entries['csq'] <  '20' )) { $csq='Dobrý signál';}
   if (($entries['csq'] > '19') and ($entries['csq'] <  '26' )) { $csq='Veľmi dobrý signál';}
   if (($entries['csq'] > '25') and ($entries['csq'] <  '35' )) { $csq='Výborný signál';}
