@@ -247,6 +247,37 @@ echo "    </select>
 echo "   <a href=\"http://".$_SERVER["SERVER_NAME"]."/osm.php?year=$year&amp;month=$month&amp;day=$day&amp;devicerpi=$devicerpi\" target=\"_blank\" style=\"text-decoration:none\"><b>Zobraz mapu</b> </a><br>
 </table>\n\n";
 
+// Build one month-wide calendar summary using the existing device/time index.
+// Times in GPS tables are UTC strings; calendar days are Europe/Bratislava local days.
+$calendar_devices_by_day = array();
+$local_tz = new DateTimeZone('Europe/Bratislava');
+$utc_tz = new DateTimeZone('UTC');
+$local_month_start = new DateTimeImmutable(sprintf('%04d-%02d-01 00:00:00', $year, $month), $local_tz);
+$local_month_end = $local_month_start->modify('+1 month');
+$utc_month_start = $local_month_start->setTimezone($utc_tz)->format('Y-m-d H:i:s');
+$utc_month_end = $local_month_end->setTimezone($utc_tz)->format('Y-m-d H:i:s');
+if (!empty($gps_devices)) {
+    $quoted_devices = array();
+    foreach (array_keys($gps_devices) as $device_id) {
+        $quoted_devices[] = "'" . mysqli_real_escape_string($spojenie, $device_id) . "'";
+    }
+    $calendar_sql = "SELECT devicerpi, DATE(CONVERT_TZ(time, 'UTC', 'Europe/Bratislava')) AS local_day
+        FROM $MySQL_table
+        WHERE devicerpi IN (" . implode(',', $quoted_devices) . ")
+          AND time >= '" . mysqli_real_escape_string($spojenie, $utc_month_start) . "'
+          AND time < '" . mysqli_real_escape_string($spojenie, $utc_month_end) . "'
+        GROUP BY devicerpi, local_day";
+    $calendar_result = mysqli_query($spojenie, $calendar_sql);
+    if ($calendar_result) {
+        while ($calendar_row = mysqli_fetch_assoc($calendar_result)) {
+            $calendar_day = $calendar_row['local_day'];
+            if ($calendar_day !== null) {
+                $calendar_devices_by_day[$calendar_day][] = $gps_devices[$calendar_row['devicerpi']];
+            }
+        }
+    }
+}
+
 ############################################
 ################# KALENDAR #################
 ############################################
@@ -265,6 +296,8 @@ class Calendar {
     public $currentDate=null;
     public $daysInMonth=0;
     public $naviHref= null;
+    public $devicesByDay = array();
+    public $devicerpi = '';
 
     /********************* PUBLIC **********************/
     /**
@@ -379,15 +412,17 @@ class Calendar {
          $bgcolor="style=\"background: lightgreen!important\"";
         }
 
-        return '<li '.$bgcolor.'> <a href="?year='.$this->currentYear.'&amp;month='.$this->currentMonth.'&amp;day='.$cellContent.'&amp;devicerpi='.$this->devicerpi.'">'.$cellContent.'</a> </li>
+        $devices = $this->currentDate === null ? array() : ($this->devicesByDay[$this->currentDate] ?? array());
+        $devicesTitle = htmlspecialchars(implode(', ', $devices), ENT_QUOTES, 'UTF-8');
+        $activity = count($devices) > 0 ? ' <small style="font-weight:bold;color:#075e24">('.count($devices).')</small>' : '';
+        return '<li '.$bgcolor.'> <a title="'.$devicesTitle.'" href="?year='.$this->currentYear.'&amp;month='.$this->currentMonth.'&amp;day='.$cellContent.'&amp;devicerpi='.rawurlencode($this->devicerpi).'">'.$cellContent.$activity.'</a> </li>
 ';
     }
     /**
     * create navigation
     */
     public function _createNavi(){
-        $devicerpi = $_POST['devicerpi'];
-        $this->devicerpi=$devicerpi;
+        $devicerpi = $this->devicerpi;
         $nextMonth = $this->currentMonth==12?1:intval($this->currentMonth)+1;
         $nextYear = $this->currentMonth==12?intval($this->currentYear)+1:$this->currentYear;
         $preMonth = $this->currentMonth==1?12:intval($this->currentMonth)-1;
@@ -442,6 +477,8 @@ class Calendar {
     }
 }
 $calendar = new Calendar();
+$calendar->devicerpi = $devicerpi;
+$calendar->devicesByDay = $calendar_devices_by_day;
 echo $calendar->show();
 ############################################
 ################# KALENDAR #################
