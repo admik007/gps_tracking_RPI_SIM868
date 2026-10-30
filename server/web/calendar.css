@@ -128,3 +128,106 @@ div#calendar div.clear { clear: both; }
     div#calendar ul.label, div#calendar ul.dates { gap: 3px; }
     div#calendar div.box-content { padding: 4px; }
 }
+
+/* Page header and vehicle selector */
+.gps-toolbar {
+    width: min(100%, 455px);
+    margin: 18px auto 8px;
+    padding: 0 8px;
+    font-family: Helvetica, Arial, sans-serif;
+    box-sizing: border-box;
+}
+.gps-toolbar *, .gps-map-action *, .gps-data-scroll * {
+    box-sizing: border-box;
+}
+.gps-toolbar-title {
+    color: #444;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+}
+.gps-vehicle-form {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+.gps-vehicle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+.gps-vehicle-form select {
+    flex: 1 1 auto;
+    width: 0;
+    min-width: 0;
+    padding: 10px 8px;
+    font: 14px Helvetica, Arial, sans-serif;
+    color: #222;
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+}
+.gps-vehicle-form button {
+    flex: 0 0 auto;
+    padding: 0 15px;
+    font: bold 14px Helvetica, Arial, sans-serif;
+    background: #2168ae;
+    color: #fff;
+    border: 1px solid #15568e;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.gps-vehicle-form button:hover { background: #17558f; }
+.gps-vehicle-form button:focus-visible,
+.gps-vehicle-form select:focus-visible {
+    outline: 2px solid #15568e;
+    outline-offset: 2px;
+}
+.gps-map-action {
+    width: min(100%, 455px);
+    margin: 12px auto 20px;
+    padding: 0 8px;
+    box-sizing: border-box;
+    text-align: center;
+    font-family: Helvetica, Arial, sans-serif;
+}
+.gps-map-action a {
+    display: block;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #b6cbdc;
+    border-radius: 6px;
+    color: #155a9a;
+    font-weight: bold;
+    text-decoration: none;
+}
+.gps-map-action a:hover,
+.gps-map-action a:focus-visible { background: #e5f0fa; }
+.gps-data-scroll {
+    width: min(100%, 1500px);
+    margin: 0 auto 16px;
+    overflow-x: auto;
+}
+.gps-data-table {
+    border-collapse: collapse;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    white-space: nowrap;
+    background: white;
+}
+.gps-data-table td {
+    padding: 5px 8px;
+    border: 1px solid #aaa;
+}
+.gps-data-table tr:nth-child(even) td:not([bgcolor="#000000"]) {
+    background: #f3f6f9;
+}
+@media (max-width: 420px) {
+    .gps-toolbar { padding: 0 4px; }
+    .gps-vehicle-form button { padding: 0 10px; }
+    .gps-vehicle-form select { font-size: 12px; }
+}
