@@ -183,19 +183,31 @@ if ($tracking_list_db_row_total > 25000) {
 }
 
 
+// Sample by each day's chronological row position, never by the imported ID.
+// A window function works even when different legacy tables reused the same id.
+// Select the GPS rows first and only then look up BTS details for displayed points.
+// Requires MariaDB 10.2+ (ROW_NUMBER window function).
 $sql = "SELECT g.*, COALESCE(b.address, '- - -') AS bts_address
-        FROM $MySQL_table g
+        FROM (
+            SELECT numbered.*
+            FROM (
+                SELECT src.*,
+                       ROW_NUMBER() OVER (
+                           ORDER BY src.time DESC, src.id DESC, src.lat DESC, src.lon DESC
+                       ) AS sample_row
+                FROM $MySQL_table src
+                WHERE src.devicerpi='$devicerpi_sql'
+                  AND src.time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC')
+                  AND src.time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC')
+            ) numbered
+            WHERE MOD(numbered.sample_row - 1, $step) = 0
+        ) g
         LEFT JOIN $MySQL_table7 b
           ON b.mcc = g.mcc
          AND b.mnc = g.mnc
          AND b.cellid = g.cellid
-        WHERE g.devicerpi='$devicerpi_sql'
-          AND g.time >= CONVERT_TZ('$dayStart_sql', 'Europe/Bratislava', 'UTC')
-          AND g.time < CONVERT_TZ(DATE_ADD('$dayStart_sql', INTERVAL 1 DAY), 'Europe/Bratislava', 'UTC')
-          AND g.id MOD $step = 0
-        ORDER BY g.time DESC";
-$tracking_list_db = mysqli_query($spojenie,$sql);
-
+        ORDER BY g.time DESC, g.sample_row ASC";
+$tracking_list_db = mysqli_query($spojenie, $sql);
 
 $tracking_list_db_row = mysqli_num_rows ($tracking_list_db);
 
