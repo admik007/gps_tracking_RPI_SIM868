@@ -215,7 +215,6 @@ $selected_name = $gps_devices[$devicerpi] ?? $devicerpi;
 $selected_devicerpi = ($devicerpi === '') ? 'Vyber vozidlo' : $selected_name;
 
 echo '<div class="gps-toolbar">
-    <div class="gps-toolbar-title">GPS TRACKING · HISTÓRIA VOZIDIEL</div>
     <form class="gps-vehicle-form" method="post" action="index.php?year='.(int)$year.'&amp;month='.(int)$month.'&amp;day='.(int)$day.'">
         <label for="gps-vehicle-select" class="gps-vehicle-label">Vozidlo</label>
         <select id="gps-vehicle-select" name="devicerpi" required>
@@ -469,8 +468,8 @@ echo $calendar->show();
 // Keep map navigation below the selected calendar date.
 $map_parameters = http_build_query(array(
     'year' => $year,
-    'month' => $month,
-    'day' => $day,
+    'month' => sprintf('%02d', (int)$month),
+    'day' => sprintf('%02d', (int)$day),
     'devicerpi' => $devicerpi,
 ), '', '&amp;');
 echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="_blank" rel="noopener noreferrer">Zobraziť trasu na mape</a></div>';
