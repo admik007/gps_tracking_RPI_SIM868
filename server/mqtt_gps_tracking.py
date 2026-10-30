@@ -83,8 +83,9 @@ def safe_bool(value, default=True):
 
 def register_new_bts(data, device_id, gps_time, gps_valid, lat, lon, alt,
                      mcc, mnc, cellid, lac, bsic):
-    """Register only NEW GSM cells; leave existing surveyed BTS untouched.
+    """Register GSM cells and add the first valid fix to unknown cells.
 
+    Never modify surveyed towers or already located observations.
     GPS coordinates are a place of reception, never a proven tower location.
     Invalid network identity is ignored. A BTS insert failure must not discard
     an otherwise valid GPS measurement; the caller surrounds it with a savepoint.
@@ -115,6 +116,19 @@ def register_new_bts(data, device_id, gps_time, gps_valid, lat, lon, alt,
     )
     original_time = gps_time if isinstance(gps_time, str) else ""
 
+    # For a newly discovered cell with no GPS fix (e.g. in a garage),
+    # fill its first reception position once the GPS gets a valid fix.
+    # All other existing cell records remain unchanged.
+    duplicate_update = (
+        """
+        lat = IF(location_type = 'unknown', VALUES(lat), lat),
+        lon = IF(location_type = 'unknown', VALUES(lon), lon),
+        alt = IF(location_type = 'unknown', VALUES(alt), alt),
+        location_type = IF(location_type = 'unknown', 'observation', location_type)
+        """
+        if valid_position else "id = id"
+    )
+
     cursor.execute(
         """
         INSERT INTO bts_tracking (
@@ -128,8 +142,8 @@ def register_new_bts(data, device_id, gps_time, gps_valid, lat, lon, alt,
             %s, 'GSM', %s, %s,
             1, 'gps_tracker'
         )
-        ON DUPLICATE KEY UPDATE id = id
-        """,
+        ON DUPLICATE KEY UPDATE {}
+        """.format(duplicate_update),
         (
             position_lat, position_lon, position_alt, original_time[:26],
             device_id, mcc, mnc, str(bsic), cellid, str(lac),
@@ -141,6 +155,11 @@ def register_new_bts(data, device_id, gps_time, gps_valid, lat, lon, alt,
             mcc, mnc, cellid, location_type
         ))
         return "new"
+    if cursor.rowcount == 2:
+        print("BTS LOCATED: {}/{}/{} (unknown -> observation)".format(
+            mcc, mnc, cellid
+        ))
+        return "located"
     return "existing"
 
 
