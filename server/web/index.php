@@ -316,10 +316,13 @@ class Calendar {
         $content='<div id="calendar" class="calendar-horizontal">'.
                     '<div class="box">'.$this->_createNavi().'</div>'.
                     '<div class="box-content">'.
-                    '<div class="calendar-scroll" role="region" aria-label="Dni vybraného mesiaca" tabindex="0">'.
-                    '<ul class="dates">';
-        // Display calendar dates consecutively, without weekday-alignment placeholders.
-        for ($d = 1; $d <= $this->daysInMonth; $d++) {
+                    '<div class="calendar-day-rows" aria-label="Dni vybraného mesiaca">'.
+                    '<ul class="dates dates-first" aria-label="Dni 1 až 15">';
+        for ($d = 1; $d <= min(15, $this->daysInMonth); $d++) {
+            $content .= $this->_showDay($d);
+        }
+        $content .= '</ul><ul class="dates dates-second" aria-label="Dni 16 až koniec mesiaca">';
+        for ($d = 16; $d <= $this->daysInMonth; $d++) {
             $content .= $this->_showDay($d);
         }
         $content .= '</ul></div></div></div>';
