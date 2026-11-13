@@ -205,7 +205,7 @@ $cutoff = time() - 1800;
 $cutoffIso = gmdate('Y-m-d\\TH:i:s', $cutoff);
 $cutoffSql = gmdate('Y-m-d H:i:s', $cutoff);
 $routeStmt = $spojenie->prepare(
-    "SELECT lat, lon, time FROM (
+    "SELECT lat, lon, time, id FROM (
          SELECT lat, lon, time, id
          FROM {$table}
          WHERE devicerpi = ?
