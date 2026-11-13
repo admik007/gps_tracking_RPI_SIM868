@@ -80,6 +80,7 @@ declare(strict_types=1);
 
     const API = 'live_api.php';
     const POLL_MS = 5000;
+    const ROUTE_REFRESH_MS = 60000;
     const map = L.map('map', { zoomControl: true }).setView([48.7, 20.1], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
@@ -99,7 +100,9 @@ declare(strict_types=1);
     let marker = null;
     let trail = null;
     let pollTimer = null;
+    let routePollTimer = null;
     let polling = false;
+    let routeLoading = false;
     let follow = true;
     let firstPosition = true;
     let animationFrame = null;
@@ -181,6 +184,7 @@ declare(strict_types=1);
         vehicleSelect.value = match ? match.id : data.devices[0].id;
         selectedDevice = vehicleSelect.value;
         await updatePosition();
+        fetchRoute();
         startPolling();
     }
 
@@ -188,7 +192,7 @@ declare(strict_types=1);
         if (!selectedDevice || polling) return;
         polling = true;
         try {
-            const data = await fetchJson(API + '?device=' + encodeURIComponent(selectedDevice));
+            const data = await fetchJson(API + '?action=position&device=' + encodeURIComponent(selectedDevice));
             errorEl.textContent = '';
             const pos = data.position;
 
@@ -239,6 +243,21 @@ declare(strict_types=1);
                 directionEl.textContent = '—';
             }
 
+        } catch (error) {
+            errorEl.textContent = error.message || 'Nepodarilo sa načítať GPS údaje';
+        } finally {
+            polling = false;
+        }
+    }
+
+    async function fetchRoute() {
+        if (!selectedDevice || routeLoading) return;
+        const requestedDevice = selectedDevice;
+        routeLoading = true;
+        try {
+            const data = await fetchJson(API + '?action=route&device=' + encodeURIComponent(requestedDevice));
+            // Ignore a late response if the user switched to another vehicle meanwhile.
+            if (requestedDevice !== selectedDevice) return;
             if (Array.isArray(data.route) && data.route.length > 1) {
                 if (!trail) {
                     trail = L.polyline(data.route, {
@@ -255,15 +274,18 @@ declare(strict_types=1);
                 trail.setLatLngs(data.route || []);
             }
         } catch (error) {
-            errorEl.textContent = error.message || 'Nepodarilo sa načítať GPS údaje';
+            // The live position remains usable even if historical data cannot be loaded.
+            errorEl.textContent = 'Polohu máme, história sa nenačítala: ' + (error.message || 'chyba servera');
         } finally {
-            polling = false;
+            routeLoading = false;
         }
     }
 
     function startPolling() {
         if (pollTimer) clearInterval(pollTimer);
+        if (routePollTimer) clearInterval(routePollTimer);
         pollTimer = setInterval(updatePosition, POLL_MS);
+        routePollTimer = setInterval(fetchRoute, ROUTE_REFRESH_MS);
     }
 
     vehicleSelect.addEventListener('change', function () {
@@ -272,7 +294,9 @@ declare(strict_types=1);
         if (trail) { map.removeLayer(trail); trail = null; }
         firstPosition = true;
         speedEl.textContent = '—';
+        errorEl.textContent = '';
         updatePosition();
+        fetchRoute();
     });
 
     followButton.addEventListener('click', function () {
