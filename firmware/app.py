@@ -9,6 +9,47 @@ import json
 import gc
 
 BOOT_TIME = utime.ticks_ms()
+UPTIME_LOG_INTERVAL_MS = 60 * 60 * 1000
+DAILY_REBOOT_CHECK_INTERVAL = 10
+
+# Europe/Bratislava: DST starts at 01:00 UTC on the last Sunday in March
+# and ends at 01:00 UTC on the last Sunday in October.
+def slovak_localtime(utc_timestamp):
+    utc_tm = time.localtime(utc_timestamp)
+    year = utc_tm[0]
+
+    march_last_weekday = time.localtime(
+        time.mktime((year, 3, 31, 0, 0, 0, 0, 0))
+    )[6]
+    october_last_weekday = time.localtime(
+        time.mktime((year, 10, 31, 0, 0, 0, 0, 0))
+    )[6]
+
+    march_last_sunday = 31 - ((march_last_weekday + 1) % 7)
+    october_last_sunday = 31 - ((october_last_weekday + 1) % 7)
+
+    dst_start = time.mktime(
+        (year, 3, march_last_sunday, 1, 0, 0, 0, 0)
+    )
+    dst_end = time.mktime(
+        (year, 10, october_last_sunday, 1, 0, 0, 0, 0)
+    )
+
+    offset = 7200 if dst_start <= utc_timestamp < dst_end else 3600
+    return time.localtime(utc_timestamp + offset)
+
+
+def format_uptime(milliseconds):
+    total_seconds = milliseconds // 1000
+    days = total_seconds // 86400
+    hours = (total_seconds % 86400) // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    return "{}d {:02d}:{:02d}:{:02d}".format(
+        days, hours, minutes, seconds
+    )
+
+
 # =========================
 # CONFIG
 # =========================
@@ -33,6 +74,9 @@ mqtt_ok = False
 storage_status = "unknown"
 
 print("System start")
+print("Application uptime:", format_uptime(
+    utime.ticks_diff(utime.ticks_ms(), BOOT_TIME)
+))
 
 # =========================
 # SD LOGGER
@@ -119,6 +163,8 @@ last_network_info = time.time()
 last_publish = 0
 last_mqtt_success = time.time()
 last_gc = time.time()
+last_uptime_log = utime.ticks_ms()
+last_daily_reboot_check = time.time()
 gsm_failed_since = None
 # =========================
 # PENDING STATE
@@ -143,6 +189,42 @@ def get_storage_status():
 # =========================
 while True:
     led.toggle()
+
+    # =====================================================
+    # HOURLY UPTIME + DAILY REBOOT
+    # =====================================================
+    uptime_ms = utime.ticks_diff(utime.ticks_ms(), BOOT_TIME)
+    if utime.ticks_diff(utime.ticks_ms(), last_uptime_log) >= UPTIME_LOG_INTERVAL_MS:
+        print("Pico uptime:", format_uptime(uptime_ms))
+        last_uptime_log = utime.ticks_ms()
+
+    if time.time() - last_daily_reboot_check >= DAILY_REBOOT_CHECK_INTERVAL:
+        last_daily_reboot_check = time.time()
+        utc_tm = time.localtime()
+        if utc_tm[0] >= 2022:
+            local_tm = slovak_localtime(time.time())
+            if local_tm[3] == 23 and local_tm[4] == 59:
+                local_date = "{:04d}-{:02d}-{:02d}".format(
+                    local_tm[0], local_tm[1], local_tm[2]
+                )
+                try:
+                    try:
+                        with open("daily_reboot.txt", "r") as f:
+                            last_reboot_date = f.read().strip()
+                    except OSError:
+                        last_reboot_date = ""
+
+                    if last_reboot_date != local_date:
+                        with open("daily_reboot.txt", "w") as f:
+                            f.write(local_date)
+                        print(
+                            "Scheduled daily reboot at Slovak local time:",
+                            local_date, "23:59"
+                        )
+                        time.sleep(1)
+                        machine.reset()
+                except Exception as e:
+                    print("Daily reboot scheduling error:", e)
 
     # =====================================================
     # GPS READ
