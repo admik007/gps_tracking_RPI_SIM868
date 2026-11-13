@@ -560,8 +560,9 @@ echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="
 ############## GPS TO ADDRESS ##############
 ############################################
 
-  $SPD=substr($entries['spd'],0,2);
-  if ($SPD < '3') {$SPD='0';}
+  // Database speed is already stored in km/h; keep the full numeric value.
+  $SPD = (float)($entries['spd'] ?? 0);
+  if ($SPD < 3) {$SPD = 0;}
 
   $lat_last=$entries['lat'];
   $lon_last=$entries['lon'];
@@ -615,7 +616,7 @@ if ($entries['lat'] == '0.000000' ){
   <td bgcolor="'.$bgmiesto.'" align="center">'.$i.'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$POS.'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.round($entries['alt'],3).'</td>
-  <td bgcolor="'.$bgmiesto.'" align="center">'.round($SPD,2).'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.round($SPD).'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$direction.'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$entries['sat'].'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.(new DateTime($entries['time'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Europe/Bratislava'))->format('Y-m-d H:i:s').'</td>
