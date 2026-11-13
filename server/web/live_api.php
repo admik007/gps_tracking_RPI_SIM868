@@ -34,7 +34,9 @@ if (!isset($spojenie) || !($spojenie instanceof mysqli) || $spojenie->connect_er
     live_json_response(['ok' => false, 'error' => 'Database connection unavailable'], 503);
 }
 
-if (!isset($MySQL_table1) || !preg_match('/^[A-Za-z0-9_]+$/', $MySQL_table1)) {
+if (!isset($MySQL_table1, $MySQL_table2)
+    || !preg_match('/^[A-Za-z0-9_]+$/', $MySQL_table1)
+    || !preg_match('/^[A-Za-z0-9_]+$/', $MySQL_table2)) {
     live_json_response(['ok' => false, 'error' => 'GPS table configuration is invalid'], 500);
 }
 
@@ -79,6 +81,7 @@ if (!$device) {
 }
 
 $table = $MySQL_table1;
+$archiveTable = $MySQL_table2;
 
 // Latest received record: used to determine whether the tracker is online.
 $latestStmt = $spojenie->prepare(
@@ -96,6 +99,26 @@ $latestStmt->execute();
 $latestResult = $latestStmt->get_result();
 $latest = $latestResult ? $latestResult->fetch_assoc() : null;
 $latestStmt->close();
+
+// After monthly archiving the live table can be empty; retain the last known
+// position by falling back to the archive table.
+if (!$latest) {
+    $archiveLatestStmt = $spojenie->prepare(
+        "SELECT lat, lon, alt, spd, sat, time, direction, gps_valid, creg, csq
+         FROM {$archiveTable}
+         WHERE devicerpi = ?
+         ORDER BY time DESC, id DESC
+         LIMIT 1"
+    );
+    if (!$archiveLatestStmt) {
+        live_json_response(['ok' => false, 'error' => 'Unable to prepare archive lookup'], 500);
+    }
+    $archiveLatestStmt->bind_param('s', $deviceId);
+    $archiveLatestStmt->execute();
+    $archiveLatestResult = $archiveLatestStmt->get_result();
+    $latest = $archiveLatestResult ? $archiveLatestResult->fetch_assoc() : null;
+    $archiveLatestStmt->close();
+}
 
 if (!$latest) {
     live_json_response([
@@ -137,6 +160,27 @@ $positionResult = $positionStmt->get_result();
 $positionRow = $positionResult ? $positionResult->fetch_assoc() : null;
 $positionStmt->close();
 
+if (!$positionRow) {
+    $archivePositionStmt = $spojenie->prepare(
+        "SELECT lat, lon, alt, spd, sat, time, direction
+         FROM {$archiveTable}
+         WHERE devicerpi = ?
+           AND gps_valid = 1
+           AND lat <> '' AND lon <> ''
+           AND lat <> '0' AND lon <> '0'
+         ORDER BY time DESC, id DESC
+         LIMIT 1"
+    );
+    if (!$archivePositionStmt) {
+        live_json_response(['ok' => false, 'error' => 'Unable to prepare archive GPS-fix query'], 500);
+    }
+    $archivePositionStmt->bind_param('s', $deviceId);
+    $archivePositionStmt->execute();
+    $archivePositionResult = $archivePositionStmt->get_result();
+    $positionRow = $archivePositionResult ? $archivePositionResult->fetch_assoc() : null;
+    $archivePositionStmt->close();
+}
+
 $position = null;
 if ($positionRow) {
     $lat = live_number($positionRow['lat'], 999.0);
@@ -161,24 +205,38 @@ $cutoff = time() - 1800;
 $cutoffIso = gmdate('Y-m-d\\TH:i:s', $cutoff);
 $cutoffSql = gmdate('Y-m-d H:i:s', $cutoff);
 $routeStmt = $spojenie->prepare(
-    "SELECT lat, lon, time
-     FROM {$table}
-     WHERE devicerpi = ?
-       AND gps_valid = 1
-       AND lat <> '' AND lon <> ''
-       AND lat <> '0' AND lon <> '0'
-       AND (
-           (time LIKE '____-__-__T%' AND time >= ?)
-           OR
-           (time NOT LIKE '____-__-__T%' AND time >= ?)
-       )
+    "SELECT lat, lon, time FROM (
+         SELECT lat, lon, time, id
+         FROM {$table}
+         WHERE devicerpi = ?
+           AND gps_valid = 1
+           AND lat <> '' AND lon <> ''
+           AND lat <> '0' AND lon <> '0'
+           AND (
+               (time LIKE '____-__-__T%' AND time >= ?)
+               OR
+               (time NOT LIKE '____-__-__T%' AND time >= ?)
+           )
+         UNION ALL
+         SELECT lat, lon, time, id
+         FROM {$archiveTable}
+         WHERE devicerpi = ?
+           AND gps_valid = 1
+           AND lat <> '' AND lon <> ''
+           AND lat <> '0' AND lon <> '0'
+           AND (
+               (time LIKE '____-__-__T%' AND time >= ?)
+               OR
+               (time NOT LIKE '____-__-__T%' AND time >= ?)
+           )
+     ) AS recent_points
      ORDER BY time ASC, id ASC
      LIMIT 600"
 );
 if (!$routeStmt) {
     live_json_response(['ok' => false, 'error' => 'Unable to prepare route query'], 500);
 }
-$routeStmt->bind_param('sss', $deviceId, $cutoffIso, $cutoffSql);
+$routeStmt->bind_param('ssssss', $deviceId, $cutoffIso, $cutoffSql, $deviceId, $cutoffIso, $cutoffSql);
 $routeStmt->execute();
 $routeResult = $routeStmt->get_result();
 
