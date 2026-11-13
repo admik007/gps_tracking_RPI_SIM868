@@ -83,6 +83,65 @@ if (!$device) {
 $table = $MySQL_table1;
 $archiveTable = $MySQL_table2;
 
+// Historical route is deliberately served separately so the current position
+// can be rendered without waiting for the more expensive route query.
+if ($action === 'route') {
+    $cutoff = time() - 1800;
+    $cutoffIso = gmdate('Y-m-d\\TH:i:s', $cutoff);
+    $cutoffSql = gmdate('Y-m-d H:i:s', $cutoff);
+    $routeStmt = $spojenie->prepare(
+        "SELECT lat, lon, time, id FROM (
+             SELECT lat, lon, time, id
+             FROM {$table}
+             WHERE devicerpi = ?
+               AND gps_valid = 1
+               AND lat <> '' AND lon <> ''
+               AND lat <> '0' AND lon <> '0'
+               AND (
+                   (time LIKE '____-__-__T%' AND time >= ?)
+                   OR
+                   (time NOT LIKE '____-__-__T%' AND time >= ?)
+               )
+             UNION ALL
+             SELECT lat, lon, time, id
+             FROM {$archiveTable}
+             WHERE devicerpi = ?
+               AND gps_valid = 1
+               AND lat <> '' AND lon <> ''
+               AND lat <> '0' AND lon <> '0'
+               AND (
+                   (time LIKE '____-__-__T%' AND time >= ?)
+                   OR
+                   (time NOT LIKE '____-__-__T%' AND time >= ?)
+               )
+         ) AS recent_points
+         ORDER BY time ASC, id ASC
+         LIMIT 600"
+    );
+    if (!$routeStmt) {
+        live_json_response(['ok' => false, 'error' => 'Unable to prepare route query'], 500);
+    }
+    $routeStmt->bind_param('ssssss', $deviceId, $cutoffIso, $cutoffSql, $deviceId, $cutoffIso, $cutoffSql);
+    $routeStmt->execute();
+    $routeResult = $routeStmt->get_result();
+
+    $route = [];
+    if ($routeResult) {
+        while ($row = $routeResult->fetch_assoc()) {
+            $lat = live_number($row['lat'], 999.0);
+            $lon = live_number($row['lon'], 999.0);
+            if ($lat < -90 || $lat > 90 || $lon < -180 || $lon > 180) {
+                continue;
+            }
+            $route[] = [$lat, $lon];
+        }
+    }
+    $routeStmt->close();
+    $spojenie->close();
+
+    live_json_response(['ok' => true, 'route' => $route]);
+}
+
 // Latest received record: used to determine whether the tracker is online.
 $latestStmt = $spojenie->prepare(
     "SELECT lat, lon, alt, spd, sat, time, direction, gps_valid, creg, csq
@@ -199,59 +258,6 @@ if ($positionRow) {
     }
 }
 
-// Keep a rolling 30-minute trail. The two time formats are handled separately:
-// current records use ISO UTC (T), older records may use a SQL-style space.
-$cutoff = time() - 1800;
-$cutoffIso = gmdate('Y-m-d\\TH:i:s', $cutoff);
-$cutoffSql = gmdate('Y-m-d H:i:s', $cutoff);
-$routeStmt = $spojenie->prepare(
-    "SELECT lat, lon, time, id FROM (
-         SELECT lat, lon, time, id
-         FROM {$table}
-         WHERE devicerpi = ?
-           AND gps_valid = 1
-           AND lat <> '' AND lon <> ''
-           AND lat <> '0' AND lon <> '0'
-           AND (
-               (time LIKE '____-__-__T%' AND time >= ?)
-               OR
-               (time NOT LIKE '____-__-__T%' AND time >= ?)
-           )
-         UNION ALL
-         SELECT lat, lon, time, id
-         FROM {$archiveTable}
-         WHERE devicerpi = ?
-           AND gps_valid = 1
-           AND lat <> '' AND lon <> ''
-           AND lat <> '0' AND lon <> '0'
-           AND (
-               (time LIKE '____-__-__T%' AND time >= ?)
-               OR
-               (time NOT LIKE '____-__-__T%' AND time >= ?)
-           )
-     ) AS recent_points
-     ORDER BY time ASC, id ASC
-     LIMIT 600"
-);
-if (!$routeStmt) {
-    live_json_response(['ok' => false, 'error' => 'Unable to prepare route query'], 500);
-}
-$routeStmt->bind_param('ssssss', $deviceId, $cutoffIso, $cutoffSql, $deviceId, $cutoffIso, $cutoffSql);
-$routeStmt->execute();
-$routeResult = $routeStmt->get_result();
-
-$route = [];
-if ($routeResult) {
-    while ($row = $routeResult->fetch_assoc()) {
-        $lat = live_number($row['lat'], 999.0);
-        $lon = live_number($row['lon'], 999.0);
-        if ($lat < -90 || $lat > 90 || $lon < -180 || $lon > 180) {
-            continue;
-        }
-        $route[] = [$lat, $lon];
-    }
-}
-$routeStmt->close();
 $spojenie->close();
 
 live_json_response([
@@ -264,5 +270,5 @@ live_json_response([
     'network' => (int)$latest['creg'],
     'signal' => (int)$latest['csq'],
     'position' => $position,
-    'route' => $route
+    'route' => []
 ]);
