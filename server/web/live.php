@@ -191,8 +191,10 @@ declare(strict_types=1);
     async function updatePosition() {
         if (!selectedDevice || polling) return;
         polling = true;
+        const requestedDevice = selectedDevice;
         try {
-            const data = await fetchJson(API + '?action=position&device=' + encodeURIComponent(selectedDevice));
+            const data = await fetchJson(API + '?action=position&device=' + encodeURIComponent(requestedDevice));
+            if (requestedDevice !== selectedDevice) return;
             errorEl.textContent = '';
             const pos = data.position;
 
@@ -247,6 +249,7 @@ declare(strict_types=1);
             errorEl.textContent = error.message || 'Nepodarilo sa načítať GPS údaje';
         } finally {
             polling = false;
+            if (requestedDevice !== selectedDevice) updatePosition();
         }
     }
 
@@ -278,6 +281,7 @@ declare(strict_types=1);
             errorEl.textContent = 'Polohu máme, história sa nenačítala: ' + (error.message || 'chyba servera');
         } finally {
             routeLoading = false;
+            if (requestedDevice !== selectedDevice) fetchRoute();
         }
     }
 
