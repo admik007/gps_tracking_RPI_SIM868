@@ -463,7 +463,13 @@ $map_parameters = http_build_query(array(
     'day' => sprintf('%02d', (int)$day),
     'devicerpi' => $devicerpi,
 ), '', '&amp;');
-echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="_blank" rel="noopener noreferrer">Zobraziť trasu na mape</a></div>';
+$live_link = '';
+if ($devicerpi !== '' && isset($gps_devices[$devicerpi])) {
+    $live_url = 'live.php?' . http_build_query(array('device' => $devicerpi), '', '&');
+    $live_link = ' | <a href="' . htmlspecialchars($live_url, ENT_QUOTES, 'UTF-8') .
+        '" target="_blank" rel="noopener noreferrer">Sledovať LIVE</a>';
+}
+echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="_blank" rel="noopener noreferrer">Zobraziť trasu na mape</a>'.$live_link.'</div>';
 
 ############################################
 ################# KALENDAR #################
