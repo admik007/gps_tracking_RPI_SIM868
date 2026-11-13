@@ -16,45 +16,55 @@ class GPS:
         )
         self.buffer = b""
         self.point = create()
+        self.last_rtc_sync_ticks = None
 
     # =========================================================
     # DATETIME
     # =========================================================
-    def gps_datetime(self):
-        # GPS time is authoritative only while the current fix is valid.
-        if self.point.get("valid"):
-            d = self.point.get("date", "")
-            t = self.point.get("ts", "")
+    RTC_SYNC_INTERVAL_MS = 60 * 60 * 1000
 
-            if d and t:
-                try:
-                    day = int(d[0:2])
-                    month = int(d[2:4])
-                    year = 2000 + int(d[4:6])
-
-                    hour = int(t[0:2])
-                    minute = int(t[2:4])
-                    second = int(float(t[4:]))
-
-                    if year != 2021:
-                        return "{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}Z".format(
-                            year, month, day, hour, minute, second
-                        )
-                except Exception as e:
-                    print("GPS datetime error:", e)
-
-        # No valid GPS fix -> use Pico RTC. RTC is synchronized from GPS
-        # when a valid fix is available.
+    def rtc_datetime(self):
+        """Return the Pico RTC time in UTC, or an empty string if invalid."""
         try:
             dt = machine.RTC().datetime()
-            if dt[0] != 2021:
-                return "{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}Z".format(
-                    dt[0], dt[1], dt[2], dt[4], dt[5], dt[6]
-                )
+            year, month, day = dt[0], dt[1], dt[2]
+            hour, minute, second = dt[4], dt[5], dt[6]
+
+            if year < 2022 or not (1 <= month <= 12):
+                return ""
+            if not (1 <= day <= 31 and 0 <= hour <= 23):
+                return ""
+            if not (0 <= minute <= 59 and 0 <= second <= 59):
+                return ""
+
+            return "{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}Z".format(
+                year, month, day, hour, minute, second
+            )
         except Exception as e:
             print("RTC datetime error:", e)
+            return ""
 
-        return ""
+    def gps_datetime(self):
+        # Pico RTC is the single time source for MQTT and application logs.
+        return self.rtc_datetime()
+
+    def rtc_fields(self):
+        """Return RTC date/time in the format expected by the SD logger."""
+        try:
+            dt = machine.RTC().datetime()
+            if not self.rtc_datetime():
+                return "", ""
+
+            date = "{:02d}{:02d}{:02d}".format(
+                dt[2], dt[1], dt[0] % 100
+            )
+            ts = "{:02d}{:02d}{:02d}.000".format(
+                dt[4], dt[5], dt[6]
+            )
+            return date, ts
+        except Exception as e:
+            print("RTC fields error:", e)
+            return "", ""
 
     # =========================================================
     # READ
@@ -99,13 +109,16 @@ class GPS:
 
         self.point["valid"] = (fields[2] == "A")
 
+        # RMC carries UTC date/time even when navigation status is V.
+        # Capture and use it to maintain the Pico RTC independently of fix.
+        self.point["ts"] = fields[1]
+        self.point["date"] = fields[9]
+        self.sync_rtc()
+
         # Keep the last known coordinates and movement values when the
         # receiver loses its fix. app.py marks them with gps_valid=False.
         if not self.point["valid"]:
             return
-
-        self.point["ts"] = fields[1]
-        self.point["date"] = fields[9]
 
         self.point["lat"] = self.convert(fields[3], fields[4])
         self.point["lon"] = self.convert(fields[5], fields[6])
@@ -129,7 +142,7 @@ class GPS:
         d = self.point.get("date", "")
         t = self.point.get("ts", "")
 
-        if not d or not t:
+        if not d or not t or len(d) < 6 or len(t) < 6:
             return False
 
         try:
@@ -141,7 +154,29 @@ class GPS:
             minute = int(t[2:4])
             second = int(float(t[4:]))
 
-            if year == 2021:
+            # Reject missing/obviously invalid GNSS time.
+            if year < 2022 or year > 2099:
+                return False
+            if not (1 <= month <= 12 and 1 <= day <= 31):
+                return False
+            if not (0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
+                return False
+
+            now = time.ticks_ms()
+            rtc = machine.RTC()
+            rtc_time = rtc.datetime()
+            rtc_valid = rtc_time[0] >= 2022
+
+            # Set RTC immediately if it has not yet been initialized.
+            # Otherwise compare/correct at most once per hour.
+            due = (
+                not rtc_valid
+                or self.last_rtc_sync_ticks is None
+                or time.ticks_diff(now, self.last_rtc_sync_ticks)
+                    >= self.RTC_SYNC_INTERVAL_MS
+            )
+
+            if not due:
                 return False
 
             gps_tuple = (
@@ -149,39 +184,37 @@ class GPS:
                 hour, minute, second, 0
             )
 
-            rtc = machine.RTC()
-            rtc_time = rtc.datetime()
-
-            if rtc_time[0] == 2021:
+            if not rtc_valid:
                 rtc.datetime(gps_tuple)
                 print(
-                    "RTC synchronized from GPS:",
+                    "RTC initialized from GNSS:",
                     "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
                         year, month, day, hour, minute, second
                     )
                 )
+                self.last_rtc_sync_ticks = now
                 return True
 
             try:
                 gps_seconds = time.mktime((
-                    year, month, day,
-                    hour, minute, second,
-                    0, 0
+                    year, month, day, hour, minute, second, 0, 0
                 ))
                 rtc_seconds = time.mktime((
                     rtc_time[0], rtc_time[1], rtc_time[2],
-                    rtc_time[4], rtc_time[5], rtc_time[6],
-                    0, 0
+                    rtc_time[4], rtc_time[5], rtc_time[6], 0, 0
                 ))
-                difference = abs(gps_seconds - rtc_seconds)
+                difference = gps_seconds - rtc_seconds
             except Exception:
                 difference = 0
 
-            if difference > 5:
+            self.last_rtc_sync_ticks = now
+
+            if abs(difference) > 5:
                 rtc.datetime(gps_tuple)
-                print("RTC corrected from GPS, difference:", difference, "s")
+                print("RTC corrected from GNSS, difference:", difference, "s")
                 return True
 
+            print("RTC hourly check OK, difference:", difference, "s")
             return False
 
         except Exception as e:
