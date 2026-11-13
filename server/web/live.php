@@ -68,7 +68,7 @@ declare(strict_types=1);
         <div><span class="stat-label">Smer</span><span id="direction" class="stat-value">—</span></div>
     </div>
     <div class="actions">
-        <button id="follow" type="button">Sledovať vozidlo</button>
+        <button id="follow" type="button">Sledovanie zapnuté</button>
         <span class="hint">Obnova každých 5 sekúnd</span>
     </div>
     <div id="error" class="error" role="status"></div>
@@ -305,7 +305,7 @@ declare(strict_types=1);
 
     followButton.addEventListener('click', function () {
         follow = !follow;
-        followButton.textContent = follow ? 'Sledovať vozidlo' : 'Sledovanie vypnuté';
+        followButton.textContent = follow ? 'Sledovanie zapnuté' : 'Sledovanie vypnuté';
         followButton.classList.toggle('secondary', !follow);
         if (follow && marker) map.panTo(marker.getLatLng());
     });
