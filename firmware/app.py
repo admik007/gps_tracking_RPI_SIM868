@@ -149,6 +149,8 @@ while True:
     # =====================================================
     point = gps.read()
     record = None
+    rtc_now = gps.gps_datetime()
+    rtc_date, rtc_ts = gps.rtc_fields()
 
     # =====================================================
     # NEW VALID GPS POINT
@@ -157,11 +159,14 @@ while True:
         last_ts = point["ts"]
         print(point)
 
-        record = {
-            "id": mqtt.CLIENT_ID,
-            "date": point["date"],
-            "ts": point["ts"],
-            "time": gps.gps_datetime(),
+        if not rtc_now or not rtc_date or not rtc_ts:
+            print("WARNING: valid GPS fix but Pico RTC is not initialized")
+        else:
+            record = {
+                "id": mqtt.CLIENT_ID,
+                "date": rtc_date,
+                "ts": rtc_ts,
+                "time": rtc_now,
             "lat": point["lat"],
             "lon": point["lon"],
             "spd": point["spd"],
@@ -176,18 +181,18 @@ while True:
             "bsic": network_info.get("bsic", 0),
             "cellid": network_info.get("cellid", 0),
             "lac": network_info.get("lac", 0),
-            "gps_valid": True
-        }
+                "gps_valid": True
+            }
 
-        # Permanent SD log contains only real GPS fixes.
-        if logger is not None and logger.sd_ok:
+        # Permanent SD log contains only real GPS fixes and uses Pico RTC time.
+        if record is not None and logger is not None and logger.sd_ok:
             try:
                 logger.write(record, network_info)
             except Exception as e:
                 print("SD write error:", e)
 
         # If MQTT is already known to be offline, cache every real GPS point.
-        if not mqtt_ok and logger is not None and logger.sd_ok:
+        if record is not None and not mqtt_ok and logger is not None and logger.sd_ok:
             try:
                 logger.cache(record, network_info)
                 print("MQTT offline - point cached")
@@ -202,7 +207,7 @@ while True:
     # Publish also when GPS has no fix. In that case lat/lon (and movement
     # values) are the last known values and gps_valid=False. No such
     # heartbeat is written to the permanent log or pending queue.
-    if mqtt_ok and (time.time() - last_publish >= PUBLISH_INTERVAL):
+    if mqtt_ok and rtc_now and (time.time() - last_publish >= PUBLISH_INTERVAL):
         payload = {
             "id": mqtt.CLIENT_ID,
             "lat": point["lat"],
@@ -220,7 +225,7 @@ while True:
             "cellid": network_info.get("cellid", 0),
             "lac": network_info.get("lac", 0),
             "gps_valid": bool(point["valid"]),
-            "time": gps.gps_datetime(),
+            "time": rtc_now,
             "storage": get_storage_status()
         }
 
