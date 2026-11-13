@@ -167,23 +167,22 @@ while True:
                 "date": rtc_date,
                 "ts": rtc_ts,
                 "time": rtc_now,
-            "lat": point["lat"],
-            "lon": point["lon"],
-            "spd": point["spd"],
-            "dir": point["dir"],
-            "alt": point["alt"],
-            "sat": point["sat"],
-            "csq": network_info.get("csq", 0),
-            "creg": network_info.get("creg", 0),
-            "cgatt": network_info.get("cgatt", 0),
-            "mcc": network_info.get("mcc", ""),
-            "mnc": network_info.get("mnc", ""),
-            "bsic": network_info.get("bsic", 0),
-            "cellid": network_info.get("cellid", 0),
-            "lac": network_info.get("lac", 0),
+                "lat": point["lat"],
+                "lon": point["lon"],
+                "spd": point["spd"],
+                "dir": point["dir"],
+                "alt": point["alt"],
+                "sat": point["sat"],
+                "csq": network_info.get("csq", 0),
+                "creg": network_info.get("creg", 0),
+                "cgatt": network_info.get("cgatt", 0),
+                "mcc": network_info.get("mcc", ""),
+                "mnc": network_info.get("mnc", ""),
+                "bsic": network_info.get("bsic", 0),
+                "cellid": network_info.get("cellid", 0),
+                "lac": network_info.get("lac", 0),
                 "gps_valid": True
             }
-
         # Permanent SD log contains only real GPS fixes and uses Pico RTC time.
         if record is not None and logger is not None and logger.sd_ok:
             try:
