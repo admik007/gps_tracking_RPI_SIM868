@@ -1,111 +1,192 @@
-import network, time, urequests, machine, os
+"""GPS tracker bootloader: bounded Wi-Fi OTA check, then local app.py.
+
+OTA source: http://HOST/firmware/<DEVICE_ID>/manifest.json
+Manifest format: {"version":"...", "files":{"app.py":"<sha256>", ...}}
+The bootloader main.py and local config.py are never overwritten by OTA.
+"""
+import os
+import time
+import machine
+import network
+import ujson
+import uhashlib
+import ubinascii
 import config
 
-SSID = config.SSID
-PASS = config.PASS
-HOST = config.HOST
-
 DEVICE_ID = "".join("{:02x}".format(b) for b in machine.unique_id())
-BASE_URL = f"http://"+HOST+"/firmware/"+DEVICE_ID+"/"
-VERSION_URL = BASE_URL + "version.txt"
-MANIFEST_URL = BASE_URL + "manifest.txt"
-LOCAL_VERSION_FILE = "version.txt"
-print("Start local script ...")
-led = machine.Pin("LED", machine.Pin.OUT)
-def blink():
- led.value(1)
- time.sleep(.1)
- led.value(0)
- time.sleep(.9)
-# ----------------- Connect Wi-Fi -----------------
-wlan = network.WLAN(network.STA_IF)
-wlan.active(True)
-def connect_wifi():
-    wlan.disconnect()
-    time.sleep(0.3)
-#    wlan.connect(SSID, security=0)
-    wlan.connect(SSID, PASS)
-    timeout = 15000  # 15 seconds
-    start = time.ticks_ms()
-    while not wlan.isconnected():
-        if time.ticks_diff(time.ticks_ms(), start) > timeout:
-            print("Wi-Fi timeout")
-            return False
-        time.sleep(0.2)
-    print("Wi-Fi connected:", wlan.ifconfig())
-    return True
-# Retry 3×
-for attempt in range(3):
-    if connect_wifi():
-        break
-    print("WiFi retry", attempt+1)
-    blink()
-    time.sleep(1)
-else:
-    print("Wi-Fi failed, running local script")
-    if "app.py" in os.listdir():
-        exec(open("app.py").read())
-    else:
-        machine.reset()
-# ----------------- Check latest version -----------------
-try:
-    r = urequests.get(VERSION_URL)
-    latest_version = r.text.strip()
-    r.close()
-except:
-    latest_version = None
-# Read local version
-local_version = None
-if LOCAL_VERSION_FILE in os.listdir():
-    with open(LOCAL_VERSION_FILE) as f:
-        local_version = f.read().strip()
-# ----------------- Download files if new -----------------
-if latest_version and latest_version != local_version:
-    print("Downloading new firmware...")
-    files = []
-    # Download manifest
+BASE_URL = "http://" + config.HOST.rstrip("/") + "/firmware/" + DEVICE_ID + "/"
+PROTECTED = ("main.py", "config.py", "boot.py")
+MAX_FILE_BYTES = 70000
+
+
+def sha256(data):
+    return ubinascii.hexlify(uhashlib.sha256(data).digest()).decode()
+
+
+def fetch(url):
+    import urequests
+    response = urequests.get(url)
     try:
-        r = urequests.get(MANIFEST_URL)
-        files = [line.strip() for line in r.text.splitlines() if line.strip()]
-        r.close()
-        blink()
-    except Exception as e:
-        print("Failed to download manifest:", e)
-        files = []
-    if files:
-        # Download all files
-        for file in files:
-            print(f"Downloading {file}...")
+        if response.status_code != 200:
+            raise OSError("HTTP status %s" % response.status_code)
+        return response.content
+    finally:
+        response.close()
+
+
+def connect_wifi():
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    if wlan.isconnected():
+        return True
+
+    for attempt in range(2):
+        try:
+            wlan.connect(config.SSID, config.PASS)
+            start = time.ticks_ms()
+            while time.ticks_diff(time.ticks_ms(), start) < 7000:
+                if wlan.isconnected():
+                    print("Wi-Fi connected:", wlan.ifconfig()[0])
+                    return True
+                time.sleep_ms(200)
+        except Exception as exc:
+            print("Wi-Fi error:", exc)
+
+        try:
+            wlan.disconnect()
+        except Exception:
+            pass
+
+    print("Wi-Fi unavailable; local app will run")
+    return False
+
+
+def update_firmware():
+    base = BASE_URL.rstrip("/")
+    raw = fetch(base + "/manifest.json")
+    if len(raw) > 10000:
+        raise ValueError("manifest too large")
+
+    manifest = ujson.loads(raw)
+    version = str(manifest["version"])
+    files = manifest["files"]
+
+    if not isinstance(files, dict) or not files:
+        raise ValueError("invalid manifest")
+    if len(files) > 12:
+        raise ValueError("too many files")
+
+    try:
+        with open("version.txt", "r") as f:
+            if f.read().strip() == version:
+                print("Firmware current:", version)
+                return
+    except OSError:
+        pass
+
+    staged = []
+    swapped = []
+    backed_up = []
+
+    try:
+        # Download and verify every file before replacing anything.
+        for name, digest in files.items():
+            if (not isinstance(name, str) or not name.endswith(".py")
+                    or name.startswith(".") or "/" in name or "\\" in name
+                    or name in PROTECTED or ".." in name):
+                raise ValueError("disallowed firmware filename: %s" % name)
+            if not isinstance(digest, str) or len(digest) != 64:
+                raise ValueError("invalid SHA256 for %s" % name)
+
+            data = fetch(base + "/" + name)
+            if len(data) > MAX_FILE_BYTES or sha256(data) != digest.lower():
+                raise ValueError("SHA256/size mismatch: %s" % name)
+
+            with open(name + ".new", "wb") as f:
+                f.write(data)
+            staged.append(name)
+
+        # Keep backups so failed swaps can be rolled back.
+        for name in staged:
             try:
-                r = urequests.get(BASE_URL + file)
-                with open(file, "w") as f:
-                    f.write(r.text)
-                r.close()
-            except Exception as e:
-                print(f"Failed to download {file}: {e}")
-        # Auto-delete unused files
-        protected = ["boot.py", "main.py", "version.txt"]
-        local_files = os.listdir()
-        for lf in local_files:
-            if lf not in files and lf not in protected:
-                try:
-                    print(f"Deleting old file: {lf}")
-                    os.remove(lf)
-                except Exception as e:
-                    print(f"Failed to delete {lf}: {e}")
-        # Save new version
-        with open(LOCAL_VERSION_FILE, "w") as f:
-            f.write(latest_version)
-        print("Update complete")
-    else:
-        print("Manifest missing or empty. Skipping update.")
-# ----------------- Run main app -----------------
+                os.remove(name + ".bak")
+            except OSError:
+                pass
+
+            try:
+                os.rename(name, name + ".bak")
+                backed_up.append(name)
+            except OSError:
+                pass  # first install
+
+            os.rename(name + ".new", name)
+            swapped.append(name)
+
+        with open("version.txt.new", "w") as f:
+            f.write(version)
+        try:
+            os.remove("version.txt")
+        except OSError:
+            pass
+        os.rename("version.txt.new", "version.txt")
+        print("Firmware updated to", version)
+
+    except Exception:
+        # Roll back all swapped files (including partial installs).
+        for name in reversed(swapped):
+            try:
+                os.remove(name)
+            except OSError:
+                pass
+
+        for name in reversed(backed_up):
+            try:
+                os.rename(name + ".bak", name)
+            except OSError:
+                pass
+
+        for name in staged:
+            try:
+                os.remove(name + ".new")
+            except OSError:
+                pass
+        raise
+
+
+def boot():
+    # Blink during boot, Wi-Fi check and OTA. app.py takes over LED control.
+    led = machine.Pin("LED", machine.Pin.OUT)
+    led_timer = machine.Timer(-1)
+    led_timer.init(
+        period=150,
+        mode=machine.Timer.PERIODIC,
+        callback=lambda timer: led.toggle()
+    )
+
+    # Give Thonny time to attach after Pico starts.
+    print("Startup delay: 15 seconds (Thonny connection)")
+    time.sleep(15)
+
+    print("Pico DEVICE_ID:", DEVICE_ID)
+    print("Firmware URL:", BASE_URL)
+
+    if connect_wifi():
+        try:
+            update_firmware()
+        except Exception as exc:
+            print("OTA skipped:", exc)
+
+    led_timer.deinit()
+    led.value(0)
+
+    # GPS app.py starts its main loop when imported (no app.run() wrapper).
+    import app
+
+
 try:
-    print("Start external script ...")
-    print(BASE_URL)
-    exec(open("app.py").read())
-except Exception as e:
-    print("Application crashed:", e)
-    print("Resetting system in 10 seconds")
-    time.sleep(10)
+    boot()
+except Exception as exc:
+    import sys
+    sys.print_exception(exc)
+    time.sleep(5)
     machine.reset()
