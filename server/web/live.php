@@ -23,6 +23,11 @@ declare(strict_types=1);
         }
         .topline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         h1 { font-size: 17px; margin: 0; }
+        .panel-toggle { flex-shrink: 0; }
+        .panel.collapsed { width: auto; padding: 6px; }
+        .panel.collapsed .topline { justify-content: flex-end; }
+        .panel.collapsed h1, .panel.collapsed #status, .panel.collapsed .panel-content { display: none; }
+        .panel.collapsed .panel-toggle { white-space: nowrap; }
         .status { font-size: 12px; font-weight: 700; padding: 5px 9px; border-radius: 20px; background: #e5e7eb; color: #374151; }
         .status.online { background: #dcfce7; color: #166534; }
         .status.offline { background: #fee2e2; color: #991b1b; }
@@ -49,29 +54,33 @@ declare(strict_types=1);
 <body>
 <div id="map"></div>
 
-<section class="panel" aria-label="GPS live ovládanie">
+<section id="infoPanel" class="panel" aria-label="GPS live ovládanie">
     <div class="topline">
         <h1>GPS Live Tracking</h1>
         <span id="status" class="status">Načítavam…</span>
+        <button id="panelToggle" class="panel-toggle secondary" type="button"
+                aria-expanded="true" aria-controls="panelContent">Minimalizovať</button>
     </div>
-    <select id="vehicle" class="vehicle-select" aria-label="Vyber vozidlo">
-        <option value="">Načítavam vozidlá…</option>
-    </select>
-    <div class="speed-row">
-        <span id="speed" class="speed">—</span>
-        <span class="unit">km/h</span>
+    <div id="panelContent" class="panel-content">
+        <select id="vehicle" class="vehicle-select" aria-label="Vyber vozidlo">
+            <option value="">Načítavam vozidlá…</option>
+        </select>
+        <div class="speed-row">
+            <span id="speed" class="speed">—</span>
+            <span class="unit">km/h</span>
+        </div>
+        <div class="stats">
+            <div><span class="stat-label">Posledná aktualizácia</span><span id="updated" class="stat-value">—</span></div>
+            <div><span class="stat-label">GPS stav</span><span id="gps" class="stat-value">—</span></div>
+            <div><span class="stat-label">Satelity</span><span id="satellites" class="stat-value">—</span></div>
+            <div><span class="stat-label">Smer</span><span id="direction" class="stat-value">—</span></div>
+        </div>
+        <div class="actions">
+            <button id="follow" type="button">Sledovanie zapnuté</button>
+            <span class="hint">Obnova každých 5 sekúnd</span>
+        </div>
+        <div id="error" class="error" role="status"></div>
     </div>
-    <div class="stats">
-        <div><span class="stat-label">Posledná aktualizácia</span><span id="updated" class="stat-value">—</span></div>
-        <div><span class="stat-label">GPS stav</span><span id="gps" class="stat-value">—</span></div>
-        <div><span class="stat-label">Satelity</span><span id="satellites" class="stat-value">—</span></div>
-        <div><span class="stat-label">Smer</span><span id="direction" class="stat-value">—</span></div>
-    </div>
-    <div class="actions">
-        <button id="follow" type="button">Sledovanie zapnuté</button>
-        <span class="hint">Obnova každých 5 sekúnd</span>
-    </div>
-    <div id="error" class="error" role="status"></div>
 </section>
 
 <script>
@@ -96,6 +105,8 @@ declare(strict_types=1);
     const directionEl = document.getElementById('direction');
     const errorEl = document.getElementById('error');
     const followButton = document.getElementById('follow');
+    const infoPanel = document.getElementById('infoPanel');
+    const panelToggle = document.getElementById('panelToggle');
 
     let marker = null;
     let trail = null;
@@ -301,6 +312,14 @@ declare(strict_types=1);
         errorEl.textContent = '';
         updatePosition();
         fetchRoute();
+    });
+
+    panelToggle.addEventListener('click', function () {
+        const collapsed = infoPanel.classList.toggle('collapsed');
+        panelToggle.textContent = collapsed ? 'Zobraziť informácie' : 'Minimalizovať';
+        panelToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        // Recalculate the map viewport after the panel changes size.
+        window.setTimeout(function () { map.invalidateSize({ animate: true }); }, 250);
     });
 
     followButton.addEventListener('click', function () {
