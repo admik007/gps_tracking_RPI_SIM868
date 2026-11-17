@@ -15,7 +15,7 @@ declare(strict_types=1);
         body { overflow: hidden; background: #eef2f6; }
         #map { position: absolute; inset: 0; z-index: 1; background: #dce5e9; }
         .panel {
-            position: absolute; z-index: 500; top: 14px; left: 14px;
+            position: absolute; z-index: 500; top: 14px; right: 14px; left: auto;
             width: min(370px, calc(100vw - 28px)); padding: 14px;
             background: rgba(255,255,255,.96); border: 1px solid rgba(15,23,42,.12);
             border-radius: 12px; box-shadow: 0 4px 22px rgba(15,23,42,.18);
@@ -46,7 +46,7 @@ declare(strict_types=1);
         .car-marker { background: transparent; border: 0; }
         .car-marker svg { display: block; filter: drop-shadow(0 2px 2px rgba(0,0,0,.45)); transform-origin: 50% 50%; }
         @media (max-width: 600px) {
-            .panel { top: 8px; left: 8px; width: min(340px, calc(100vw - 16px)); padding: 11px; }
+            .panel { top: 8px; right: 8px; left: auto; width: min(340px, calc(100vw - 16px)); padding: 11px; }
             .speed { font-size: 31px; }
         }
     </style>
