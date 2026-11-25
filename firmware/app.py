@@ -343,7 +343,7 @@ def run():
                 "cellid": network_info.get("cellid", 0),
                 "lac": network_info.get("lac", 0),
                 "gps_valid": bool(point["valid"]),
-                "time": rtc_now,
+                "time": rtc_now if rtc_now else None,
                 "storage": get_storage_status()
             }
     
