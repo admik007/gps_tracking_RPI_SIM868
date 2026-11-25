@@ -1,7 +1,7 @@
 {
-  "version": "20261125194500-sim868-gnss-flash-fallback",
+  "version": "20261125210000-common-pico-bootloader",
   "files": {
-    "app.py": "b13a1b8a9ca1105454648685d37372c2cb0ab08c91527b3e3b28059d9cc6cb7c",
+    "app.py": "53fcdfa85e4982bce878f8dbfd6c815a0a8d5fba61c1fbb60a5a23774ffc8b62",
     "buffer.py": "40d1230f6dc5163163e58f870c19cebce1aca8ad86f86d9e79e0acb161a42dd7",
     "gps.py": "df76b94221a3529deeab8a4441735941ab5db677e4499efd8d35e61e05340c16",
     "just_mount.py": "9ae48e72debf96bd8d36c27efe869d13dd253959405cc6943630fd7fd8c7fb0d",
