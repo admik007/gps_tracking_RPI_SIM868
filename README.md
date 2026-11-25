@@ -4,7 +4,7 @@ RPI Pico 2W         - https://www.raspberrypi.com/documentation/microcontrollers
 
 SIM868 Pico version - https://www.waveshare.com/pico-sim868-gsm-gprs-gnss.htm
 
-L76B GNSS module    - https://www.waveshare.com/pico-gps-l76b.htm
+SIM868 GNSS          - GNSS integrated in the SIM868 modem; no separate L76B module required
 
 Adalogger RTC + SD  - https://www.adafruit.com/product/2922
 
