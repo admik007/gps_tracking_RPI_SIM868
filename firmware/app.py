@@ -3,7 +3,6 @@
 def run():
     from gps import GPS
     from logger import Logger
-    from flash_logger import FlashLogger
     
     import time, utime
     import machine
@@ -11,6 +10,7 @@ def run():
     import mqtt
     import json
     import gc
+    import config
     
     BOOT_TIME = utime.ticks_ms()
     UPTIME_LOG_INTERVAL_MS = 60 * 60 * 1000
@@ -69,6 +69,7 @@ def run():
     # Kolko zaznamov poslat naraz z cache
     PENDING_BATCH_SIZE = 5
     FLASH_LOG_INTERVAL = 30
+    SD_LOGGING = getattr(config, "SD_LOGGING", True)
     
     
     # =========================
@@ -84,24 +85,32 @@ def run():
     ))
     
     # =========================
-    # SD LOGGER
+    # DATA STORAGE
     # =========================
-    try:
-        logger = Logger()
-        if logger.sd_ok:
-            storage_status = "ok"
-        else:
-            storage_status = "failed"
-    except Exception as e:
-        print("SD logger failed:", e)
-        logger = None
-        storage_status = "failed"  
-    
-    # =========================
-    # INTERNAL FLASH FALLBACK
-    # =========================
-    flash_logger = FlashLogger()
+    logger = None
+    flash_logger = None
     last_flash_log = 0
+
+    if SD_LOGGING:
+        from flash_logger import FlashLogger
+
+        # SD logging enabled: initialize SD and emergency flash fallback.
+        try:
+            logger = Logger()
+            if logger.sd_ok:
+                storage_status = "ok"
+            else:
+                storage_status = "failed"
+        except Exception as e:
+            print("SD logger failed:", e)
+            logger = None
+            storage_status = "failed"
+
+        flash_logger = FlashLogger()
+    else:
+        # GPS test mode: do not mount or write to SD/internal flash.
+        storage_status = "disabled"
+        print("SD logging disabled by config.py")
     
     # =========================
     # MODEM
@@ -196,9 +205,11 @@ def run():
     # FUNKCIA NA ZISTENIE STAVU SD
     # =========================
     def get_storage_status():
+        if not SD_LOGGING:
+            return "disabled"
         if logger is not None and logger.sd_ok:
             return "ok"
-    
+
         return "failed"
     # =========================
     # MAIN LOOP
@@ -282,7 +293,7 @@ def run():
                     "gps_valid": True
                 }
             # Permanent SD log contains only real GPS fixes and uses Pico RTC time.
-            if record is not None and logger is not None and logger.sd_ok:
+            if record is not None and SD_LOGGING and logger is not None and logger.sd_ok:
                 try:
                     logger.write(record, network_info)
                 except Exception as e:
@@ -290,6 +301,7 @@ def run():
     
             # Emergency flash fallback: only if SD is unavailable and MQTT is offline.
             if (record is not None and
+                    SD_LOGGING and
                     (logger is None or not logger.sd_ok) and
                     not mqtt_ok and
                     time.time() - last_flash_log >= FLASH_LOG_INTERVAL):
@@ -298,7 +310,7 @@ def run():
                     print("SD unavailable + MQTT offline - point saved to flash")
     
             # If MQTT is already known to be offline, cache every real GPS point.
-            if record is not None and not mqtt_ok and logger is not None and logger.sd_ok:
+            if record is not None and not mqtt_ok and SD_LOGGING and logger is not None and logger.sd_ok:
                 try:
                     logger.cache(record, network_info)
                     print("MQTT offline - point cached")
@@ -355,7 +367,7 @@ def run():
                     # After each successful current/heartbeat message, try one
                     # pending batch. Five points stay below the SIM868 CIPSEND
                     # packet-size limit with the expanded JSON payload.
-                    if logger is not None and logger.sd_ok:
+                    if SD_LOGGING and logger is not None and logger.sd_ok:
                         try:
                             sent = logger.flush_pending(
                                 mqtt_publish=mqtt.mqtt_publish,
@@ -375,7 +387,7 @@ def run():
                             print("Pending batch error:", e)
     
                     # Flash queue is separate from the SD pending queue.
-                    if flash_logger.enabled:
+                    if flash_logger is not None and flash_logger.enabled:
                         try:
                             flash_sent = flash_logger.flush_pending(
                                 mqtt_publish=mqtt.mqtt_publish,
@@ -394,7 +406,7 @@ def run():
     
                     # Cache only a newly-created real GPS point. Heartbeats with
                     # gps_valid=False must never enter pending.txt.
-                    if record is not None and logger is not None and logger.sd_ok:
+                    if record is not None and SD_LOGGING and logger is not None and logger.sd_ok:
                         try:
                             logger.cache(record, network_info)
                         except Exception as e:
@@ -404,7 +416,7 @@ def run():
                 print("MQTT publish error:", e)
                 mqtt_ok = False
     
-                if record is not None and logger is not None and logger.sd_ok:
+                if record is not None and SD_LOGGING and logger is not None and logger.sd_ok:
                     try:
                         logger.cache(record, network_info)
                     except Exception as cache_error:
@@ -507,7 +519,8 @@ def run():
                                 # SEND ONE PENDING BATCH
                                 # =====================================
                                 if (
-                                    logger is not None
+                                    SD_LOGGING
+                                    and logger is not None
                                     and logger.sd_ok
                                 ):
                                     try:
@@ -626,7 +639,7 @@ def run():
                                     # =================================================
                                     # SEND ONE PENDING BATCH
                                     # =================================================
-                                    if logger is not None and logger.sd_ok:
+                                    if SD_LOGGING and logger is not None and logger.sd_ok:
                                         try:
                                             sent = (
                                                 logger.flush_pending(
