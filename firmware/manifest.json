@@ -1,14 +1,15 @@
 {
-  "version": "20261113190000-gps-daily-reboot",
+  "version": "20261125193000-sim868-gnss-flash-fallback",
   "files": {
-    "app.py": "ca9eccf283542926bb641899e02366c49024aae8f616325eaccb45d0ab9c45fa",
+    "app.py": "e19b7beca285a60bb3c0bbb378b85a49d66fd2f970e5a86a1fad2ac3ec5423b4",
     "buffer.py": "40d1230f6dc5163163e58f870c19cebce1aca8ad86f86d9e79e0acb161a42dd7",
-    "gps.py": "203854b4b310338a515aeb8f4b5bcac9975ad624455dd97949fb2694a03fa619",
+    "gps.py": "df76b94221a3529deeab8a4441735941ab5db677e4499efd8d35e61e05340c16",
     "just_mount.py": "9ae48e72debf96bd8d36c27efe869d13dd253959405cc6943630fd7fd8c7fb0d",
     "logger.py": "df74efaf87c176787db5c6cd407f622766fbb0480bbe30b34982aec53651635a",
     "modem.py": "3c67f58ce3a72446e34edccbc7d12ea36293d9ba1ce7cc37a848270daaf8f987",
     "mqtt.py": "ed1be69182105803e4dc70caa21a0df2036b3d88d5cdedb616f282351110c330",
     "sdcard.py": "9960ddc30abd65e6026ec51be1432fcc2867bd58194f56ca6f98e1bdbe0f351c",
-    "trackpoint.py": "9d560d356ee6a335fddce2d609666ebb2ff92e4c6883bc903652ab7da83d293c"
+    "trackpoint.py": "9d560d356ee6a335fddce2d609666ebb2ff92e4c6883bc903652ab7da83d293c",
+    "flash_logger.py": "0fc8adbcc4ded2640698c1a360a0bb4bd54b95db46f879db228d358ad84e92bf"
   }
 }
