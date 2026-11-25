@@ -92,6 +92,8 @@ def run():
     last_flash_log = 0
 
     if SD_LOGGING:
+        from flash_logger import FlashLogger
+
         # SD logging enabled: initialize SD and emergency flash fallback.
         try:
             logger = Logger()
@@ -515,7 +517,8 @@ def run():
                                 # SEND ONE PENDING BATCH
                                 # =====================================
                                 if (
-                                    logger is not None
+                                    SD_LOGGING
+                                    and logger is not None
                                     and logger.sd_ok
                                 ):
                                     try:
