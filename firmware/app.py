@@ -205,9 +205,11 @@ def run():
     # FUNKCIA NA ZISTENIE STAVU SD
     # =========================
     def get_storage_status():
-        if SD_LOGGING and logger is not None and logger.sd_ok:
+        if not SD_LOGGING:
+            return "disabled"
+        if logger is not None and logger.sd_ok:
             return "ok"
-    
+
         return "failed"
     # =========================
     # MAIN LOOP
