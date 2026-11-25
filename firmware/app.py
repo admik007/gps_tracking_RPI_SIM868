@@ -119,7 +119,6 @@ print("Modem init")
 modem_ok = modem.modem_init()
 if modem_ok:
     print("Modem OK")
-    gps.start()
     # =========================
     # INITIAL NETWORK INFO
     # =========================
@@ -164,6 +163,10 @@ else:
         "creg": 0,
         "cgatt": 0
     }
+
+# Start GNSS even if GSM registration / GPRS initialization failed.
+gps.start()
+
 # =========================
 # TIMERS
 # =========================
@@ -575,7 +578,11 @@ while True:
                         # =================================================
                         # FULL MODEM INIT
                         # =================================================
-                        if modem.modem_init():
+                        modem_reinit_ok = modem.modem_init()
+                        # A modem power reset also turns GNSS off; enable it
+                        # again even if GSM registration is still unavailable.
+                        gps.start()
+                        if modem_reinit_ok:
                             print(
                                 "Modem reinitialized"
                             )
