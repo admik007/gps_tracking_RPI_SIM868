@@ -1,7 +1,7 @@
 {
-  "version": "20261125223000-manifest-only-version",
+  "version": "20261125-rtc-independent-heartbeat-v1",
   "files": {
-    "app.py": "762233c14cc2fa14124d55981c0c51f6af8c7c5f7c1a4d0d53ea4e11995b0bde",
+    "app.py": "a74b02e0a0cd4c3b888e3579adc85c4a9d358ed75d380de0dd57c53efdb78570",
     "buffer.py": "6ab21a2d1486ee2f2a3a399c158cccdee70efb4d19df813b69f0729714a8ffd2",
     "gps.py": "df76b94221a3529deeab8a4441735941ab5db677e4499efd8d35e61e05340c16",
     "just_mount.py": "3404587f4bc5e34baf420e91411e92b88ff42c16956d6da8b209c788644ed219",
