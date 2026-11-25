@@ -1,8 +1,8 @@
-"""GPS tracker bootloader: bounded Wi-Fi OTA check, then local app.py.
+"""Common Pico W bootloader used by all tracker projects.
 
-OTA source: http://HOST/firmware/<DEVICE_ID>/manifest.json
-Manifest format: {"version":"...", "files":{"app.py":"<sha256>", ...}}
-The bootloader main.py and local config.py are never overwritten by OTA.
+Standard OTA configuration: config_wifi.py with SSID, PASS and HOST.
+Legacy projects may temporarily expose the same values through config.py.
+The bootloader main.py and local configuration files are never overwritten.
 """
 import os
 import time
@@ -11,11 +11,15 @@ import network
 import ujson
 import uhashlib
 import ubinascii
-import config
+
+try:
+    import config_wifi
+except ImportError:
+    import config as config_wifi
 
 DEVICE_ID = "".join("{:02x}".format(b) for b in machine.unique_id())
-BASE_URL = "http://" + config.HOST.rstrip("/") + "/firmware/" + DEVICE_ID + "/"
-PROTECTED = ("main.py", "config.py", "boot.py")
+BASE_URL = "http://" + config_wifi.HOST.rstrip("/") + "/firmware/" + DEVICE_ID + "/"
+PROTECTED = ("main.py", "config.py", "config_wifi.py", "boot.py")
 MAX_FILE_BYTES = 70000
 
 
@@ -42,7 +46,7 @@ def connect_wifi():
 
     for attempt in range(2):
         try:
-            wlan.connect(config.SSID, config.PASS)
+            wlan.connect(config_wifi.SSID, config_wifi.PASS)
             start = time.ticks_ms()
             while time.ticks_diff(time.ticks_ms(), start) < 7000:
                 if wlan.isconnected():
@@ -179,8 +183,8 @@ def boot():
     led_timer.deinit()
     led.value(0)
 
-    # GPS app.py starts its main loop when imported (no app.run() wrapper).
     import app
+    app.run()
 
 
 try:
