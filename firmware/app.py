@@ -1,5 +1,6 @@
 from gps import GPS
 from logger import Logger
+from flash_logger import FlashLogger
 
 import time, utime
 import machine
@@ -64,6 +65,7 @@ GC_INTERVAL = 60
 
 # Kolko zaznamov poslat naraz z cache
 PENDING_BATCH_SIZE = 5
+FLASH_LOG_INTERVAL = 30
 
 
 # =========================
@@ -93,6 +95,12 @@ except Exception as e:
     storage_status = "failed"  
 
 # =========================
+# INTERNAL FLASH FALLBACK
+# =========================
+flash_logger = FlashLogger()
+last_flash_log = 0
+
+# =========================
 # MODEM
 # =========================
 print("Modem power on")
@@ -108,7 +116,8 @@ gps = GPS()
 # MODEM INIT
 # =========================
 print("Modem init")
-if modem.modem_init():
+modem_ok = modem.modem_init()
+if modem_ok:
     print("Modem OK")
     # =========================
     # INITIAL NETWORK INFO
@@ -154,6 +163,10 @@ else:
         "creg": 0,
         "cgatt": 0
     }
+
+# Start GNSS even if GSM registration / GPRS initialization failed.
+gps.start()
+
 # =========================
 # TIMERS
 # =========================
@@ -272,6 +285,15 @@ while True:
             except Exception as e:
                 print("SD write error:", e)
 
+        # Emergency flash fallback: only if SD is unavailable and MQTT is offline.
+        if (record is not None and
+                (logger is None or not logger.sd_ok) and
+                not mqtt_ok and
+                time.time() - last_flash_log >= FLASH_LOG_INTERVAL):
+            if flash_logger.cache(record, network_info):
+                last_flash_log = time.time()
+                print("SD unavailable + MQTT offline - point saved to flash")
+
         # If MQTT is already known to be offline, cache every real GPS point.
         if record is not None and not mqtt_ok and logger is not None and logger.sd_ok:
             try:
@@ -348,6 +370,20 @@ while True:
 
                     except Exception as e:
                         print("Pending batch error:", e)
+
+                # Flash queue is separate from the SD pending queue.
+                if flash_logger.enabled:
+                    try:
+                        flash_sent = flash_logger.flush_pending(
+                            mqtt_publish=mqtt.mqtt_publish,
+                            topic="gps/" + mqtt.CLIENT_ID + "/location",
+                            device_id=mqtt.CLIENT_ID,
+                            batch_size=PENDING_BATCH_SIZE
+                        )
+                        if flash_sent:
+                            print("Flash pending batch sent:", flash_sent)
+                    except Exception as e:
+                        print("Flash pending batch error:", e)
 
             else:
                 print("MQTT lost")
@@ -542,7 +578,11 @@ while True:
                         # =================================================
                         # FULL MODEM INIT
                         # =================================================
-                        if modem.modem_init():
+                        modem_reinit_ok = modem.modem_init()
+                        # A modem power reset also turns GNSS off; enable it
+                        # again even if GSM registration is still unavailable.
+                        gps.start()
+                        if modem_reinit_ok:
                             print(
                                 "Modem reinitialized"
                             )
