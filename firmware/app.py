@@ -275,7 +275,7 @@ def run():
                     "id": mqtt.CLIENT_ID,
                     "date": rtc_date,
                     "ts": rtc_ts,
-                    "time": rtc_now,
+                    "time": rtc_now if rtc_now else None,
                     "lat": point["lat"],
                     "lon": point["lon"],
                     "spd": point["spd"],
@@ -325,15 +325,15 @@ def run():
         # Publish also when GPS has no fix. In that case lat/lon (and movement
         # values) are the last known values and gps_valid=False. No such
         # heartbeat is written to the permanent log or pending queue.
-        if mqtt_ok and rtc_now and (time.time() - last_publish >= PUBLISH_INTERVAL):
+        if mqtt_ok and (time.time() - last_publish >= PUBLISH_INTERVAL):
             payload = {
                 "id": mqtt.CLIENT_ID,
-                "lat": point["lat"],
-                "lon": point["lon"],
-                "spd": point["spd"],
-                "alt": point["alt"],
-                "sat": point["sat"],
-                "dir": point["dir"],
+                "lat": point["lat"] if point["valid"] else None,
+                "lon": point["lon"] if point["valid"] else None,
+                "spd": point["spd"] if point["valid"] else None,
+                "alt": point["alt"] if point["valid"] else None,
+                "sat": point["sat"] if point["valid"] else 0,
+                "dir": point["dir"] if point["valid"] else None,
                 "csq": network_info.get("csq", 0),
                 "creg": network_info.get("creg", 0),
                 "cgatt": network_info.get("cgatt", 0),
