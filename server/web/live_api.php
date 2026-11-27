@@ -28,6 +28,18 @@ function live_number($value, float $default = 0.0): float {
     return is_numeric($value) ? (float)$value : $default;
 }
 
+function live_server_time(array $row): ?DateTimeImmutable {
+    $parts = ['year', 'month', 'day', 'hour', 'minute', 'second'];
+    foreach ($parts as $part) {
+        if (!isset($row[$part]) || !is_numeric($row[$part])) return null;
+    }
+    $value = sprintf('%04d-%02d-%02d %02d:%02d:%02d',
+        (int)$row['year'], (int)$row['month'], (int)$row['day'],
+        (int)$row['hour'], (int)$row['minute'], (int)$row['second']);
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, new DateTimeZone('UTC'));
+    return $date ?: null;
+}
+
 @include __DIR__ . '/_config.php';
 
 if (!isset($spojenie) || !($spojenie instanceof mysqli) || $spojenie->connect_errno) {
@@ -144,10 +156,11 @@ if ($action === 'route') {
 
 // Latest received record: used to determine whether the tracker is online.
 $latestStmt = $spojenie->prepare(
-    "SELECT lat, lon, alt, spd, sat, time, direction, gps_valid, creg, csq
+    "SELECT lat, lon, alt, spd, sat, time, direction, gps_valid, creg, cgatt, csq,
+            mcc, mnc, bsic, cellid, lac, year, month, day, hour, minute, second
      FROM {$table}
      WHERE devicerpi = ?
-     ORDER BY time DESC, id DESC
+     ORDER BY id DESC
      LIMIT 1"
 );
 if (!$latestStmt) {
@@ -163,10 +176,11 @@ $latestStmt->close();
 // position by falling back to the archive table.
 if (!$latest) {
     $archiveLatestStmt = $spojenie->prepare(
-        "SELECT lat, lon, alt, spd, sat, time, direction, gps_valid, creg, csq
+        "SELECT lat, lon, alt, spd, sat, time, direction, gps_valid, creg, cgatt, csq,
+                mcc, mnc, bsic, cellid, lac, year, month, day, hour, minute, second
          FROM {$archiveTable}
          WHERE devicerpi = ?
-         ORDER BY time DESC, id DESC
+         ORDER BY id DESC
          LIMIT 1"
     );
     if (!$archiveLatestStmt) {
@@ -192,7 +206,7 @@ if (!$latest) {
     ]);
 }
 
-$lastSeen = live_parse_utc((string)$latest['time']);
+$lastSeen = live_parse_utc((string)$latest['time']) ?: live_server_time($latest);
 $ageSeconds = $lastSeen
     ? max(0, time() - $lastSeen->getTimestamp())
     : null;
@@ -258,6 +272,55 @@ if ($positionRow) {
     }
 }
 
+// Resolve a surveyed tower only. "observation" coordinates are where a
+// tracker once received the cell, not the physical location of the tower.
+$gsmPosition = null;
+$mcc = trim((string)($latest['mcc'] ?? ''));
+$mnc = trim((string)($latest['mnc'] ?? ''));
+$cellid = trim((string)($latest['cellid'] ?? ''));
+$lac = trim((string)($latest['lac'] ?? ''));
+if (!(bool)$latest['gps_valid']
+    && preg_match('/^[0-9]{3}$/', $mcc)
+    && preg_match('/^[0-9]{2,3}$/', $mnc)
+    && ctype_digit($cellid) && (int)$cellid > 0) {
+    $btsStmt = $spojenie->prepare(
+        "SELECT lat, lon, address, location_type, technology
+         FROM bts_tracking
+         WHERE technology = 'GSM'
+           AND mcc = ? AND mnc = ? AND cellid = ?
+           AND (? = '' OR lac = ?)
+           AND location_type = 'tower'
+           AND lat <> '' AND lon <> ''
+           AND lat <> '0' AND lon <> '0'
+         ORDER BY id DESC
+         LIMIT 1"
+    );
+    if ($btsStmt) {
+        $btsStmt->bind_param('sssss', $mcc, $mnc, $cellid, $lac, $lac);
+        if ($btsStmt->execute()) {
+            $btsResult = $btsStmt->get_result();
+            $bts = $btsResult ? $btsResult->fetch_assoc() : null;
+            if ($bts) {
+                $btsLat = live_number($bts['lat'], 999.0);
+                $btsLon = live_number($bts['lon'], 999.0);
+                if ($btsLat >= -90 && $btsLat <= 90 && $btsLon >= -180 && $btsLon <= 180) {
+                    $gsmPosition = [
+                        'lat' => $btsLat,
+                        'lon' => $btsLon,
+                        'address' => (string)$bts['address'],
+                        'mcc' => $mcc,
+                        'mnc' => $mnc,
+                        'lac' => $lac,
+                        'cellid' => $cellid,
+                        'bsic' => (string)($latest['bsic'] ?? '')
+                    ];
+                }
+            }
+        }
+        $btsStmt->close();
+    }
+}
+
 $spojenie->close();
 
 live_json_response([
@@ -268,7 +331,13 @@ live_json_response([
     'last_seen' => $lastSeen ? $lastSeen->format(DateTimeInterface::ATOM) : null,
     'age_seconds' => $ageSeconds,
     'network' => (int)$latest['creg'],
+    'packet_attached' => (int)($latest['cgatt'] ?? 0),
     'signal' => (int)$latest['csq'],
+    'gsm' => [
+        'mcc' => $mcc, 'mnc' => $mnc, 'lac' => $lac,
+        'cellid' => $cellid, 'bsic' => (string)($latest['bsic'] ?? '')
+    ],
+    'gsm_position' => $gsmPosition,
     'position' => $position,
     'route' => []
 ]);
