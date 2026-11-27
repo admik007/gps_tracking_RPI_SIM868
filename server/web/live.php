@@ -38,6 +38,9 @@ declare(strict_types=1);
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 14px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
         .stat-label { display: block; color: #64748b; font-size: 11px; margin-bottom: 3px; }
         .stat-value { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+        .legend { display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; color:#475569; font-size:11px; }
+        .legend span { display:flex; align-items:center; gap:5px; }
+        .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; }
         .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
         button { border: 0; border-radius: 7px; padding: 8px 11px; background: #1d4ed8; color: white; font-weight: 600; cursor: pointer; }
         button.secondary { background: #e2e8f0; color: #1e293b; }
@@ -75,6 +78,8 @@ declare(strict_types=1);
             <div><span class="stat-label">Satelity</span><span id="satellites" class="stat-value">—</span></div>
             <div><span class="stat-label">Smer</span><span id="direction" class="stat-value">—</span></div>
         </div>
+        <div><span class="stat-label">GSM bunka</span><span id="gsm" class="stat-value">—</span></div>
+        <div class="legend"><span><i style="background:#16a34a"></i>GPS fix</span><span><i style="background:#f59e0b"></i>Známá BTS</span></div>
         <div class="actions">
             <button id="follow" type="button">Sledovanie zapnuté</button>
             <span class="hint">Obnova každých 5 sekúnd</span>
@@ -103,12 +108,14 @@ declare(strict_types=1);
     const gpsEl = document.getElementById('gps');
     const satellitesEl = document.getElementById('satellites');
     const directionEl = document.getElementById('direction');
+    const gsmEl = document.getElementById('gsm');
     const errorEl = document.getElementById('error');
     const followButton = document.getElementById('follow');
     const infoPanel = document.getElementById('infoPanel');
     const panelToggle = document.getElementById('panelToggle');
 
     let marker = null;
+    let btsMarker = null;
     let trail = null;
     let pollTimer = null;
     let routePollTimer = null;
@@ -219,16 +226,21 @@ declare(strict_types=1);
                 ? formatUpdate(data.last_seen) + (data.age_seconds !== null ? ' (' + data.age_seconds + ' s)' : '')
                 : 'Bez údajov';
 
+            const gsm = data.gsm || {};
+            gsmEl.textContent = [gsm.mcc, gsm.mnc, gsm.lac, gsm.cellid]
+                .filter(v => v !== undefined && v !== null && String(v) !== '')
+                .join(' / ') || 'Bez údajov';
+
             if (pos) {
-                speedEl.textContent = Math.round(pos.speed);
-                gpsEl.textContent = data.gps_valid ? 'Platný fix' : 'Posledný známy fix';
+                speedEl.textContent = data.gps_valid ? Math.round(pos.speed) : '—';
+                gpsEl.textContent = data.gps_valid ? 'Platný fix' : 'Bez fixu – posledný GPS bod';
                 satellitesEl.textContent = pos.satellites;
-                directionEl.textContent = Math.round(pos.direction) + '°';
+                directionEl.textContent = data.gps_valid ? Math.round(pos.direction) + '°' : '—';
                 const target = L.latLng(pos.lat, pos.lon);
 
                 if (!marker) {
                     marker = L.marker(target, {
-                        icon: carIcon(pos.direction, data.online),
+                        icon: carIcon(pos.direction, data.gps_valid && data.online),
                         zIndexOffset: 1000
                     }).addTo(map);
                     marker.bindPopup('');
@@ -237,23 +249,49 @@ declare(strict_types=1);
                         firstPosition = false;
                     }
                 } else {
-                    marker.setIcon(carIcon(pos.direction, data.online));
-                    animateMarker(target, POLL_MS - 150);
+                    marker.setIcon(carIcon(pos.direction, data.gps_valid && data.online));
+                    if (data.gps_valid) animateMarker(target, POLL_MS - 150);
+                    else marker.setLatLng(target);
                 }
 
                 marker.setPopupContent(
                     '<b>' + String(data.device.name).replace(/[&<>"]/g, '') + '</b><br>' +
-                    Math.round(pos.speed) + ' km/h<br>' + formatUpdate(pos.time)
+                    (data.gps_valid ? 'GPS poloha' : 'Posledná známa GPS poloha') + '<br>' +
+                    formatUpdate(pos.time)
                 );
-
-                if (follow) {
-                    map.panTo(target, { animate: true, duration: 1.2 });
-                }
             } else {
                 speedEl.textContent = '—';
                 gpsEl.textContent = 'Bez GPS polohy';
                 satellitesEl.textContent = '—';
                 directionEl.textContent = '—';
+            }
+
+            if (!data.gps_valid && data.gsm_position) {
+                const bts = data.gsm_position;
+                const btsLatLng = L.latLng(bts.lat, bts.lon);
+                const popup = '<b>Približná poloha podľa BTS</b><br>' +
+                    'MCC/MNC: ' + bts.mcc + '/' + bts.mnc + '<br>' +
+                    'LAC: ' + bts.lac + '<br>CellID: ' + bts.cellid +
+                    (bts.address ? '<br>' + String(bts.address).replace(/[&<>"]/g, '') : '') +
+                    '<br><i>Poloha vysielača, nie vozidla</i>';
+                if (!btsMarker) {
+                    btsMarker = L.circleMarker(btsLatLng, {
+                        radius: 9, color: '#92400e', weight: 2,
+                        fillColor: '#f59e0b', fillOpacity: 0.9
+                    }).addTo(map);
+                    btsMarker.bindPopup(popup);
+                } else {
+                    btsMarker.setLatLng(btsLatLng);
+                    btsMarker.setPopupContent(popup);
+                }
+                gpsEl.textContent = 'Bez fixu – poloha BTS';
+                if (follow) map.panTo(btsLatLng, { animate: true, duration: 1.2 });
+            } else if (btsMarker) {
+                map.removeLayer(btsMarker);
+                btsMarker = null;
+                if (data.gps_valid && marker && follow) {
+                    map.panTo(marker.getLatLng(), { animate: true, duration: 1.2 });
+                }
             }
 
         } catch (error) {
@@ -306,7 +344,9 @@ declare(strict_types=1);
     vehicleSelect.addEventListener('change', function () {
         selectedDevice = vehicleSelect.value;
         if (marker) { map.removeLayer(marker); marker = null; }
+        if (btsMarker) { map.removeLayer(btsMarker); btsMarker = null; }
         if (trail) { map.removeLayer(trail); trail = null; }
+        gsmEl.textContent = '—';
         firstPosition = true;
         speedEl.textContent = '—';
         errorEl.textContent = '';
