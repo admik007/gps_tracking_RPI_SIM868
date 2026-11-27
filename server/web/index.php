@@ -226,7 +226,6 @@ $sql = "SELECT g.*, COALESCE(b.address, '- - -') AS bts_address
          AND b.location_type = 'tower'
          AND b.mcc = g.mcc
          AND b.mnc = g.mnc
-         AND b.lac = g.lac
          AND b.cellid = g.cellid
         WHERE g.devicerpi='$devicerpi_sql'
           AND ((g.time IS NOT NULL AND g.time >= '$day_utc_start_sql' AND g.time < '$day_utc_end_sql')
