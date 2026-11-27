@@ -6,3 +6,5 @@ MQTT_USER = ""
 MQTT_PASS = ""
 MQTT_HOST = ""
 MQTT_PORT = 1883
+
+SD_LOGGING = False
