@@ -36,7 +36,9 @@ function live_server_time(array $row): ?DateTimeImmutable {
     $value = sprintf('%04d-%02d-%02d %02d:%02d:%02d',
         (int)$row['year'], (int)$row['month'], (int)$row['day'],
         (int)$row['hour'], (int)$row['minute'], (int)$row['second']);
-    $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, new DateTimeZone('UTC'));
+    // The year/month/day/hour/minute/second columns are server-local
+    // Europe/Bratislava receipt time, unlike the UTC GPS "time" column.
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, new DateTimeZone('Europe/Bratislava'));
     return $date ?: null;
 }
 
