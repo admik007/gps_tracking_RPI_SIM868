@@ -1,8 +1,15 @@
+# Copy this file to config.py on the Pico. Keep real credentials out of Git.
+
+# GPS tracker MQTT
 MQTT_USER = "gps_user"
-MQTT_PASS = "gps_host"
+MQTT_PASS = "gps_password"
 MQTT_HOST = "mqtt.server.xx"
 MQTT_PORT = 1883
 
+# Infrastructure Wi-Fi and OTA
 SSID = "NAME_SSID"
 PASS = "PASS_SSID"
 HOST = "firmware.server.xx"
+
+# Local storage
+SD_LOGGING = True
