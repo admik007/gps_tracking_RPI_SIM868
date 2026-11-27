@@ -290,7 +290,6 @@ if (!(bool)$latest['gps_valid']
          FROM bts_tracking
          WHERE technology = 'GSM'
            AND mcc = ? AND mnc = ? AND cellid = ?
-           AND (? = '' OR lac = ?)
            AND location_type = 'tower'
            AND lat <> '' AND lon <> ''
            AND lat <> '0' AND lon <> '0'
@@ -298,7 +297,7 @@ if (!(bool)$latest['gps_valid']
          LIMIT 1"
     );
     if ($btsStmt) {
-        $btsStmt->bind_param('sssss', $mcc, $mnc, $cellid, $lac, $lac);
+        $btsStmt->bind_param('sss', $mcc, $mnc, $cellid);
         if ($btsStmt->execute()) {
             $btsResult = $btsStmt->get_result();
             $bts = $btsResult ? $btsResult->fetch_assoc() : null;
