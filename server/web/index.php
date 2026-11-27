@@ -120,6 +120,24 @@ $utc_timezone = new DateTimeZone('UTC');
 // Compute the next LOCAL midnight before converting to UTC (DST-safe).
 $day_utc_start_sql = mysqli_real_escape_string($spojenie, $day_local_start->setTimezone($utc_timezone)->format('Y-m-d H:i:s'));
 $day_utc_end_sql = mysqli_real_escape_string($spojenie, $day_local_start->modify('+1 day')->setTimezone($utc_timezone)->format('Y-m-d H:i:s'));
+$day_local_start_sql = mysqli_real_escape_string($spojenie, $dayStart);
+$day_local_end_sql = mysqli_real_escape_string($spojenie, $day_local_start->modify('+1 day')->format('Y-m-d H:i:s'));
+
+function gps_display_time($gpsTime, array $row) {
+    $localTimezone = new DateTimeZone('Europe/Bratislava');
+    if (!empty($gpsTime)) {
+        try {
+            return (new DateTimeImmutable($gpsTime, new DateTimeZone('UTC')))
+                ->setTimezone($localTimezone)->format('Y-m-d H:i:s');
+        } catch (Exception $e) {}
+    }
+    $value = sprintf('%04d-%02d-%02d %02d:%02d:%02d',
+        (int)($row['year'] ?? 0), (int)($row['month'] ?? 0),
+        (int)($row['day'] ?? 0), (int)($row['hour'] ?? 0),
+        (int)($row['minute'] ?? 0), (int)($row['second'] ?? 0));
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, $localTimezone);
+    return $date ? $date->format('Y-m-d H:i:s') : '---';
+}
 
 
 if (empty($_GET["direction"])) $direction="0.0";
@@ -166,7 +184,7 @@ else {
 }
 
 
-$count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi_sql' AND time >= '$day_utc_start_sql' AND time < '$day_utc_end_sql' ";
+$count_sql = "SELECT COUNT(*) AS total FROM $MySQL_table WHERE devicerpi='$devicerpi_sql' AND ((time IS NOT NULL AND time >= '$day_utc_start_sql' AND time < '$day_utc_end_sql') OR (time IS NULL AND year = $year AND month = '".sprintf('%02d', $month)."' AND day = '".sprintf('%02d', $day)."'))";
 $gps_perf_t0 = microtime(true);
 $count_result = mysqli_query($spojenie,$count_sql);
 $gps_perf['count_query'] = microtime(true) - $gps_perf_t0;
@@ -205,14 +223,16 @@ $sql = "SELECT g.*, COALESCE(b.address, '- - -') AS bts_address
         FROM $MySQL_table g
         LEFT JOIN $MySQL_table7 b
           ON b.technology = 'GSM'
+         AND b.location_type = 'tower'
          AND b.mcc = g.mcc
          AND b.mnc = g.mnc
+         AND b.lac = g.lac
          AND b.cellid = g.cellid
         WHERE g.devicerpi='$devicerpi_sql'
-          AND g.time >= '$day_utc_start_sql'
-          AND g.time < '$day_utc_end_sql'
+          AND ((g.time IS NOT NULL AND g.time >= '$day_utc_start_sql' AND g.time < '$day_utc_end_sql')
+               OR (g.time IS NULL AND g.year = $year AND g.month = '".sprintf('%02d', $month)."' AND g.day = '".sprintf('%02d', $day)."'))
           AND g.id MOD $step = 0
-        ORDER BY g.time DESC";
+        ORDER BY COALESCE(g.time, CONCAT(g.year, '-', LPAD(g.month, 2, '0'), '-', LPAD(g.day, 2, '0'), ' ', LPAD(g.hour, 2, '0'), ':', LPAD(g.minute, 2, '0'), ':', LPAD(g.second, 2, '0'))) DESC, g.id DESC";
 $gps_perf_t0 = microtime(true);
 $tracking_list_db = mysqli_query($spojenie,$sql);
 $gps_perf['gps_query'] = microtime(true) - $gps_perf_t0;
@@ -269,12 +289,22 @@ if (!empty($gps_devices)) {
     foreach (array_keys($gps_devices) as $device_id) {
         $quoted_devices[] = "'" . mysqli_real_escape_string($spojenie, $device_id) . "'";
     }
-    $calendar_sql = "SELECT devicerpi, DATE(CONVERT_TZ(time, 'UTC', 'Europe/Bratislava')) AS local_day
+    $calendar_sql = "SELECT devicerpi, local_day FROM (
+        SELECT devicerpi, DATE(CONVERT_TZ(time, 'UTC', 'Europe/Bratislava')) AS local_day
         FROM $MySQL_table
         WHERE devicerpi IN (" . implode(',', $quoted_devices) . ")
+          AND time IS NOT NULL
           AND time >= '" . mysqli_real_escape_string($spojenie, $utc_month_start) . "'
           AND time < '" . mysqli_real_escape_string($spojenie, $utc_month_end) . "'
-        GROUP BY devicerpi, local_day";
+        UNION
+        SELECT devicerpi, CONCAT(year, '-', LPAD(month, 2, '0'), '-', LPAD(day, 2, '0')) AS local_day
+        FROM $MySQL_table
+        WHERE devicerpi IN (" . implode(',', $quoted_devices) . ")
+          AND time IS NULL
+          AND year = " . (int)$year . "
+          AND month = '" . sprintf('%02d', (int)$month) . "'
+    ) AS calendar_days
+    GROUP BY devicerpi, local_day";
     $gps_perf_t0 = microtime(true);
     $calendar_result = mysqli_query($spojenie, $calendar_sql);
     $gps_perf['calendar_query'] = microtime(true) - $gps_perf_t0;
@@ -534,33 +564,39 @@ echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="
 ############################################
 ############## GPS TO ADDRESS ##############
 ############################################
-  $GET_LAT=substr($entries['lat'],0,7);
-  $GET_LON=substr($entries['lon'],0,7);
-  $key=$GET_LAT.'_'.$GET_LON;
-  if (isset($address_cache[$key])) {
-   $gps_perf_address_cache_hits++;
-   $miesto=$address_cache[$key];
-  } else {
-   $gps_perf_address_misses++;
-   $gps_perf_addr_t0 = microtime(true);
-   $sql="SELECT miesto FROM $MySQL_table3 WHERE lat LIKE '$GET_LAT%' AND lon LIKE '$GET_LON%' AND status='OK' LIMIT 1";
-   $res=mysqli_query($spojenie,$sql);
-   $gps_perf_address_queries++;
-   if(mysqli_num_rows($res)==1){
-    $row=mysqli_fetch_assoc($res);
-    $miesto=$row['miesto'];
+  $has_gps_position = ((int)($entries['gps_valid'] ?? 1) === 1
+      && is_numeric($entries['lat']) && is_numeric($entries['lon'])
+      && ((float)$entries['lat'] != 0.0 || (float)$entries['lon'] != 0.0)
+      && (float)$entries['lat'] >= -90 && (float)$entries['lat'] <= 90
+      && (float)$entries['lon'] >= -180 && (float)$entries['lon'] <= 180);
+
+  if ($has_gps_position) {
+   $GET_LAT=substr($entries['lat'],0,7);
+   $GET_LON=substr($entries['lon'],0,7);
+   $key=$GET_LAT.'_'.$GET_LON;
+   if (isset($address_cache[$key])) {
+    $gps_perf_address_cache_hits++;
+    $miesto=$address_cache[$key];
    } else {
-    $miesto="- - -";
-    $url="https://api.geoapify.com/v1/geocode/reverse?type=street&format=xml&lat=".$entries['lat']."&lon=".$entries['lon']."&apiKey=".$GAPIKEY;
-    $gps_perf_address_log_writes++;
-    file_put_contents(
-     "get_url.txt",
-     $url."\n",
-     FILE_APPEND
-    );
+    $gps_perf_address_misses++;
+    $gps_perf_addr_t0 = microtime(true);
+    $sql="SELECT miesto FROM $MySQL_table3 WHERE lat LIKE '$GET_LAT%' AND lon LIKE '$GET_LON%' AND status='OK' LIMIT 1";
+    $res=mysqli_query($spojenie,$sql);
+    $gps_perf_address_queries++;
+    if(mysqli_num_rows($res)==1){
+     $row=mysqli_fetch_assoc($res);
+     $miesto=$row['miesto'];
+    } else {
+     $miesto="- - -";
+     $url="https://api.geoapify.com/v1/geocode/reverse?type=street&format=xml&lat=".$entries['lat']."&lon=".$entries['lon']."&apiKey=".$GAPIKEY;
+     $gps_perf_address_log_writes++;
+     file_put_contents("get_url.txt", $url."\n", FILE_APPEND);
+    }
+    $address_cache[$key]=$miesto;
+    $gps_perf_address_seconds += microtime(true) - $gps_perf_addr_t0;
    }
-   $address_cache[$key]=$miesto;
-   $gps_perf_address_seconds += microtime(true) - $gps_perf_addr_t0;
+  } else {
+   $miesto = "- - -";
   }
 ############################################
 ############## GPS TO ADDRESS ##############
@@ -612,8 +648,8 @@ echo '<div class="gps-map-action"><a href="osm.php?'.$map_parameters.'" target="
   if (($entries['csq'] > '25') and ($entries['csq'] <  '35' )) { $csq='Výborný signál';}
   if (($entries['csq'] == '0') or ($entries['csq'] == '99')) { $csq='Neznáma hodnota';}
 
-if ($entries['lat'] == '0.000000' ){
- $POS=round($entries['lat'],4).' / '.round($entries['lon'],4);
+if (!$has_gps_position) {
+ $POS='bez GPS fixu';
 } else {
  $POS='<a href="osm.php?id='.$entries['id'].'&amp;lat='.$entries['lat'].'&amp;lon='.$entries['lon'].'&amp;zoom=18" target="_blank" style="text-decoration:none">'.round($entries['lat'],4).' / '.round($entries['lon'],4).'</a>';
 }
@@ -625,7 +661,7 @@ if ($entries['lat'] == '0.000000' ){
   <td bgcolor="'.$bgmiesto.'" align="center">'.round($SPD).'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$direction.'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$entries['sat'].'</td>
-  <td bgcolor="'.$bgmiesto.'" align="center">'.(new DateTime($entries['time'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Europe/Bratislava'))->format('Y-m-d H:i:s').'</td>
+  <td bgcolor="'.$bgmiesto.'" align="center">'.gps_display_time($entries['time'] ?? null, $entries).'</td>
   <td bgcolor="'.$bgmiesto.'" align="left">'.$miesto.'</td>
   <td bgcolor="'.$bgmiesto.'" align="left">'.$SPZ.'</td>
   <td bgcolor="'.$bgmiesto.'" align="center">'.$gps_valid.'</td>
