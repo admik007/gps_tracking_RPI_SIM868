@@ -367,7 +367,9 @@ def insert_record(data, device_id):
                 return False
             raise
     else:
-        print("WARNING: invalid GPS time; key not registered:", repr(gps_time))
+        # No-fix reports have no GPS timestamp; store each received report
+        # without timestamp-based deduplication. Server receive time is kept below.
+        print("INFO: GPS timestamp unavailable; storing report with server receive time")
 
     # The registry insert and GPS INSERT are in the SAME transaction:
     # any rollback removes both, so a failed GPS insert cannot reserve a key.
