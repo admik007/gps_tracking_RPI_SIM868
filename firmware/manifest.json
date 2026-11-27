@@ -1,10 +1,8 @@
 {
-  "version": "20261125-null-time-payload-v1",
+  "version": "20261127-firmware-cleanup-v1",
   "files": {
     "app.py": "e2a36b157d8ddd504f87fe28116053b892ddecaddbf4e71f1b8f3743bf0e1cde",
-    "buffer.py": "6ab21a2d1486ee2f2a3a399c158cccdee70efb4d19df813b69f0729714a8ffd2",
     "gps.py": "df76b94221a3529deeab8a4441735941ab5db677e4499efd8d35e61e05340c16",
-    "just_mount.py": "3404587f4bc5e34baf420e91411e92b88ff42c16956d6da8b209c788644ed219",
     "logger.py": "a75c89f1abc8f830ae6b138bd3559b41b0641ef83028c922201db36a9b77dca4",
     "modem.py": "e6ffd70fd187870780c249ec01350c799ad29fcc62fc23d85c2c35f5ce7c977d",
     "mqtt.py": "05dadbe613a6e958f285780115f61a28d10b8f7090dc6aeec88a36954b524f9b",
